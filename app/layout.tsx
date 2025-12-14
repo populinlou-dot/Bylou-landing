@@ -30,8 +30,8 @@ const playfairDisplay = Playfair_Display({
   variable: "--font-playfair",
 })
 
-// BasePath para iconos (solo en producción)
-const basePath = process.env.NODE_ENV === "production" ? "/Bylou-landing" : ""
+// BasePath para iconos (usar variable de entorno del cliente)
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
 
 export const metadata: Metadata = {
   title: "ByLou Yoga - Regulá tu sistema nervioso con yoga + neurociencia",

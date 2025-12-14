@@ -371,7 +371,7 @@ export default function YogaLanding() {
                   aria-hidden="true"
                 />
                 <Image
-                  src="/public/images/design-mode/2F534545-EBF7-4E29-A744-B3D450B87186.jpg"
+                  src="/images/design-mode/practice.jpg"
                   alt="Lourdes Populin practicando yoga"
                   width={400}
                   height={600}

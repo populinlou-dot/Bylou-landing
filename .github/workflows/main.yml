@@ -49,9 +49,23 @@ jobs:
 
       - name: Build
         run: pnpm run build
+        env:
+          NODE_ENV: production
+
+      - name: Verify output directory exists
+        run: |
+          if [ ! -d "out" ]; then
+            echo "ERROR: Directory 'out' does not exist after build!"
+            echo "Build output:"
+            ls -la
+            exit 1
+          fi
+          echo "✓ Output directory 'out' exists"
 
       - name: Create .nojekyll
-        run: touch out/.nojekyll
+        run: |
+          touch out/.nojekyll
+          echo "✓ Created .nojekyll file"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4

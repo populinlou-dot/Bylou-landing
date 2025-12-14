@@ -1,8 +1,19 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+
+// Analytics solo en Vercel (no en GitHub Pages)
+// En GitHub Pages no hay VERCEL env var, así que Analytics no se carga
+let Analytics: React.ComponentType | null = null
+if (process.env.VERCEL || (typeof process !== "undefined" && process.env.VERCEL_ENV)) {
+  try {
+    const analyticsModule = require("@vercel/analytics/next")
+    Analytics = analyticsModule.Analytics
+  } catch {
+    // Ignore if not available (e.g., in GitHub Pages)
+  }
+}
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -48,7 +59,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         {children}
-        <Analytics />
+        {Analytics && <Analytics />}
       </body>
     </html>
   )

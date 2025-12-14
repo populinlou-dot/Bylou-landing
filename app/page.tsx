@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input"
@@ -21,7 +22,7 @@ export default function YogaLanding() {
   const [guideEmail, setGuideEmail] = useState("")
   const [cardsPerView, setCardsPerView] = useState(1)
 
-  const instagramLink = "https://instagram.com/bylou.yoga"
+  const instagramLink = "https://www.instagram.com/bylou.yoga"
   const emailAddress = "yoga.byloupopulin@gmail.com"
 
   const testimonials = [
@@ -175,9 +176,11 @@ export default function YogaLanding() {
         <div className="container mx-auto px-4 py-4">
           <nav className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img
+              <Image
                 src="/images/design-mode/ginkgo_transparent_bg.png"
                 alt="ByLou Yoga Logo"
+                width={40}
+                height={40}
                 className="w-8 h-8 md:w-10 md:h-10"
               />
               <div className="text-2xl font-bold" style={{ color: "#A41D2D" }}>
@@ -350,7 +353,7 @@ export default function YogaLanding() {
       <section id="acerca" className="w-full border-t" style={{ backgroundColor: "#FDECEC", borderColor: "#E8C5C5" }}>
         <div className="mx-auto max-w-5xl px-4 md:px-6 lg:px-8 py-12 md:py-16">
           <div className="flex items-center justify-center gap-3 mb-12">
-            <img src="/images/design-mode/ginkgo_transparent_bg.png" alt="" className="w-8 h-8 md:w-10 md:h-10" />
+            <Image src="/images/design-mode/ginkgo_transparent_bg.png" alt="" width={40} height={40} className="w-8 h-8 md:w-10 md:h-10" />
             <h2 className="text-3xl md:text-4xl font-semibold tracking-tight" style={{ color: "#A41D2D" }}>
               Acerca de mí
             </h2>
@@ -367,9 +370,11 @@ export default function YogaLanding() {
                   }}
                   aria-hidden="true"
                 />
-                <img
+                <Image
                   src="/images/design-mode/2F534545-EBF7-4E29-A744-B3D450B87186.jpg"
                   alt="Lourdes Populin practicando yoga"
+                  width={400}
+                  height={600}
                   className="relative w-full rounded-3xl shadow-xl object-cover"
                   style={{
                     boxShadow: "0 20px 40px rgba(164, 29, 45, 0.25)",
@@ -433,9 +438,11 @@ export default function YogaLanding() {
       >
         <div className="mx-auto max-w-7xl px-4 py-12 md:py-16">
           <div className="flex items-center justify-center gap-3 mb-10">
-            <img
+            <Image
               src="/images/design-mode/ginkgo_transparent_bg.png"
               alt=""
+              width={40}
+              height={40}
               className="w-8 h-8 md:w-10 md:h-10"
             />
             <h2 className="text-3xl md:text-4xl font-bold" style={{ color: "#A41D2D" }}>
@@ -548,9 +555,11 @@ export default function YogaLanding() {
       >
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-3 mb-3 md:mb-4">
-            <img
+            <Image
               src="/images/design-mode/ginkgo_transparent_bg.png"
               alt=""
+              width={40}
+              height={40}
               className="w-7 h-7 md:w-10 md:h-10 brightness-0 invert"
             />
             <h2 className="text-2xl md:text-4xl font-bold text-white text-center">

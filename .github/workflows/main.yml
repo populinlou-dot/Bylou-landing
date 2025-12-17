@@ -54,6 +54,8 @@ jobs:
         run: pnpm run build
         env:
           NODE_ENV: production
+          # Si usas dominio personalizado (bylou.com.ar), deja el basePath vacío
+          NEXT_PUBLIC_BASE_PATH: ""
 
       - name: Verify output directory exists
         run: |

@@ -793,7 +793,7 @@ export default function YogaLanding() {
                     className="absolute top-0 left-0 w-full h-full border-0 rounded-lg shadow-lg"
                     frameBorder={0}
                     scrolling="no"
-                    allowTransparency
+                    allowtransparency
                     allow="encrypted-media"
                   />
                 </div>

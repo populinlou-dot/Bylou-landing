@@ -34,3 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Exports de Claude Design. El patrón ".zip" no matcheaba nada: como regla de
+# gitignore busca un archivo llamado literalmente ".zip".
+*.zip

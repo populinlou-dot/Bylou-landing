@@ -45,3 +45,12 @@ NEXT_PUBLIC_BASE_PATH="" pnpm run build
 El deploy a **GitHub Pages** es automático vía GitHub Actions ([.github/workflows/main.yml](.github/workflows/main.yml)): cada push a `main` dispara el build y la publicación.
 
 Para subir el sitio a un hosting propio por FTP (cPanel/DonWeb/Ferozo), subir el **contenido** de la carpeta `out/` (generada con `NEXT_PUBLIC_BASE_PATH=""`) a la raíz del hosting.
+
+## Dominio
+
+El sitio se publica en [www.bylou.com.ar](https://www.bylou.com.ar). El dominio
+se declara en `public/CNAME`, que el build copia a `out/CNAME`.
+
+## Autor
+
+**Lourdes Populin**

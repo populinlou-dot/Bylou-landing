@@ -147,12 +147,6 @@ const STORIES = [
   { avatar: "assets/avatar-damian.jpg", tagLabel: "Cuerpo y mente", lead: "Hacer yoga es como una caricia al cuerpo y a la mente", rest: "Lourdes lo lleva a otro nivel.", author: "Damian P.", profession: "IT Project Manager" },
 ]
 
-const STEPS = [
-  { n: "01", t: "Me escribís", d: "Un mensaje por Instagram o email contándome qué te pasa y cómo es tu semana. Sin formularios largos." },
-  { n: "02", t: "Charlamos 15 minutos", d: "Un audio o llamada corta para entender tu objetivo, tu historial y cualquier molestia física. Ahí te propongo el formato." },
-  { n: "03", t: "Practicás", d: "Coordinamos día y horario, y hacés tu primera clase adaptada a vos. Si te gusta, seguimos con un pack." },
-]
-
 const FAQS = [
   { q: "¿Qué necesito para empezar si nunca practiqué?", a: "Solo un mat y un espacio tranquilo donde puedas moverte sin distracciones. Nada de flexibilidad previa ni experiencia: la primera clase la armo justamente para eso." },
   { q: "¿Individuales o grupales: cuál me conviene?", a: "Individual: foco 100% en tus objetivos, tu cuerpo y tus horarios. Grupal: energía compartida, motivación y un valor más accesible. Si tenés una molestia física puntual, empezá 1:1." },
@@ -214,7 +208,6 @@ const MARQUEE_LOOP = [...MARQUEE, ...MARQUEE]
 
 // Orden espejado al de la página, para que el nav no contradiga el scroll.
 const NAV_LINKS = [
-  { key: "metodo", href: "#metodo", label: "Método" },
   { key: "opiniones", href: "#opiniones", label: "Historias" },
   { key: "acerca", href: "#acerca", label: "Sobre Lou" },
   { key: "clases", href: "#clases", label: "Clases" },
@@ -228,15 +221,21 @@ const NAV_PANEL = [
   { n: "01", key: "clases", href: "#clases", title: "Clases y packs", desc: "1:1, packs mensuales y programas para empresas." },
   { n: "02", key: "ayuda", href: "#ayuda", title: "Encontrá tu punto de partida", desc: "Estrés, dolor físico, deporte o tu equipo." },
   { n: "03", key: "respirar", href: "#respirar", title: "Respiración 4-4-6", desc: "Probá un minuto de calma ahora mismo." },
-  { n: "04", key: "metodo", href: "#metodo", title: "Cómo empezamos", desc: "Los tres pasos desde tu mensaje hasta la primera clase." },
-  { n: "05", key: "opiniones", href: "#opiniones", title: "Historias de alumnos", desc: "Siete personas contando cómo les cambió la semana." },
-  { n: "06", key: "acerca", href: "#acerca", title: "Sobre Lou", desc: "Formación, enfoque y por qué la neurociencia." },
-  { n: "07", key: "contacto", href: "#contacto", title: "Empezá esta semana", desc: "Coordinamos día, horario y tu plan." },
-  { n: "08", key: "faq", href: "#faq", title: "Preguntas frecuentes", desc: "Equipamiento, formatos, packs y reservas." },
+  { n: "04", key: "opiniones", href: "#opiniones", title: "Historias de alumnos", desc: "Siete personas contando cómo les cambió la semana." },
+  { n: "05", key: "acerca", href: "#acerca", title: "Sobre Lou", desc: "Formación, enfoque y por qué la neurociencia." },
+  { n: "06", key: "contacto", href: "#contacto", title: "Empezá esta semana", desc: "Coordinamos día, horario y tu plan." },
+  { n: "07", key: "faq", href: "#faq", title: "Preguntas frecuentes", desc: "Equipamiento, formatos, packs y reservas." },
 ]
 
 // Secciones observadas para marcar el link activo en el nav.
-const SECTION_IDS = ["inicio", "ayuda", "respirar", "metodo", "opiniones", "acerca", "clases", "contacto", "faq"]
+const SECTION_IDS = ["inicio", "ayuda", "respirar", "opiniones", "acerca", "clases", "contacto", "faq"]
+
+const HERO_STATS = [
+  { n: "200 h", d: "Certificación Ananda Yoga" },
+  { n: "7 años", d: "de práctica e investigación" },
+  { n: "Neurociencia", d: "Universidad de Palermo" },
+  { n: "Online", d: "y presencial en Buenos Aires" },
+]
 
 const CREDENTIALS = [
   { strong: "Profesorado de Yoga, 200 h", rest: " — Instituto Ananda Yoga, Buenos Aires" },
@@ -251,7 +250,7 @@ const BENEFITS = [
 ]
 
 const CTA_ASSURANCE = [
-  { n: "01", t: "Sin compromiso", d: "La primera charla es para ver si encajamos, nada más." },
+  { n: "01", t: "Charlamos 15 minutos", d: "La primera charla es para conocernos y ver si encajamos, sin compromiso." },
   { n: "02", t: "Horario a medida", d: "Coordinamos según tu semana real, no al revés." },
   { n: "03", t: "Empezás desde cero", d: "No hace falta flexibilidad ni experiencia previa." },
 ]
@@ -478,7 +477,13 @@ export default function YogaLanding() {
       const heroWrap = heroWrapRef.current
       if (heroWrap) {
         const img = heroWrap.querySelector<HTMLElement>("[data-hero-img]")
-        if (img) img.style.transform = `scale(1.06) translateY(${Math.max(-40, Math.min(0, -y * 0.045))}px)`
+        // El scale tiene que cubrir el recorrido del translate o queda hueco.
+        // En celular no se aplica: el encuadre lo maneja el CSS y este transform
+        // inline le ganaría por especificidad.
+        if (img) {
+          if (window.innerWidth <= 640) img.style.transform = ""
+          else img.style.transform = `scale(1.16) translateY(${Math.max(-28, Math.min(0, -y * 0.035))}px)`
+        }
       }
 
       const ctaFloat = ctaFloatRef.current
@@ -685,13 +690,17 @@ export default function YogaLanding() {
         .g-guia      { grid-template-columns: minmax(0,1fr) auto; }
         .g-ayuda     { grid-template-columns: 1.28fr 0.72fr; }
         .g-respirar  { grid-template-columns: 0.88fr 1.12fr; }
-        .g-metodo    { grid-template-columns: repeat(3,1fr); }
         .g-reelhead  { grid-template-columns: 1fr auto; }
         .g-acerca    { grid-template-columns: 0.82fr 1.18fr; }
         .g-benefits  { grid-template-columns: repeat(3,1fr); }
         .g-clases    { grid-template-columns: repeat(3,1fr); }
         .g-contacto  { grid-template-columns: 1.1fr 0.9fr; }
         .g-faq       { grid-template-columns: 0.78fr 1.22fr; }
+        /* 45 / 55 a favor de la foto. La altura del marco se acota con vh para
+           que la sección entre en una pantalla, con topes por si el monitor es
+           muy alto o muy bajo. */
+        .g-medit     { grid-template-columns: 45fr 55fr; }
+        .medit-frame { height: clamp(360px, 56vh, 500px); }
         .g-footer    { grid-template-columns: 1.4fr 1fr; }
 
         /* Hero: la columna de texto manda, la foto acompaña. */
@@ -720,24 +729,117 @@ export default function YogaLanding() {
           /* La píldora de links se reemplaza por el drawer. */
           .nav-pill, .nav-cta { display: none !important; }
           .nav-burger { display: inline-flex !important; }
-          .g-hero, .g-ayuda, .g-respirar, .g-acerca, .g-contacto, .g-faq { grid-template-columns: 1fr; }
-          .g-metodo, .g-clases { grid-template-columns: repeat(2,1fr); }
+          .g-hero, .g-ayuda, .g-respirar, .g-acerca, .g-contacto, .g-faq, .g-medit { grid-template-columns: 1fr; }
+          /* Apilado: primero el texto, después la foto (orden natural del DOM). */
+          .g-medit { gap: 32px; }
+          .medit-media { max-width: 520px; justify-self: center; width: 100%; }
+          .medit-frame { height: 320px; }
+          .g-clases { grid-template-columns: repeat(2,1fr); }
           .g-guia { grid-template-columns: 1fr; }
           .hero-sec { padding-top: 130px; }
         }
 
-        @media (max-width: 760px) {
-          .g-metodo, .g-clases, .g-benefits, .g-reelhead, .g-footer, .g-herostats {
-            grid-template-columns: 1fr;
-          }
-          /* El separador vertical de las stats del hero no aplica en una columna. */
-          .g-herostats > div { border-left: 0 !important; padding-left: 0 !important; }
+        /* El carrusel escala alto y ancho con el mismo factor. */
+        .reel-col { width: calc(var(--reel-w) * var(--reel-k, 1)); height: calc(460px * var(--reel-k, 1)); }
+        .story-card { width: 352px; padding: 26px; }
+        /* Divisoria de la segunda columna de datos del hero (era inline). */
+        .stat-div { border-left: 1px solid rgba(164,29,45,0.18); padding-left: 26px; }
+
+        @media (max-width: 1100px) {
+          :root { --reel-k: 0.82; }
         }
 
+        @media (max-width: 760px) {
+          .g-clases, .g-benefits, .g-reelhead, .g-footer { grid-template-columns: 1fr; }
+          /* Los 4 datos del hero quedan 2x2, no en una columna larguísima. */
+          .g-herostats { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+          .g-herostats .stat-div { border-left: 0 !important; padding-left: 0 !important; }
+        }
+
+        /* ---- Escala general en celular ----
+           Los estilos inline ganan por especificidad, así que este bloque usa
+           !important. Es la única forma de reescalar sin reescribir el archivo. */
         @media (max-width: 640px) {
-          section, footer { padding-left: 20px !important; padding-right: 20px !important; }
-          .g-contacto { padding: 54px 24px !important; }
-          .g-guia { padding: 44px 26px !important; }
+          section, footer { padding-left: 18px !important; padding-right: 18px !important; }
+          section { padding-top: 56px !important; padding-bottom: 56px !important; }
+          .hero-sec { padding-top: 104px !important; padding-bottom: 40px !important; }
+          section[id] { scroll-margin-top: 84px; }
+
+          /* Tipografía */
+          h1 { font-size: clamp(29px, 8.4vw, 37px) !important; line-height: 1.08 !important; }
+          h2 { font-size: clamp(23px, 6.4vw, 30px) !important; line-height: 1.14 !important; }
+          h3 { font-size: 17px !important; }
+          section p { font-size: 15px !important; line-height: 1.55 !important; }
+
+          /* Botones: más bajos pero sin bajar de 46px de área táctil. */
+          /* Los botones de solo ícono quedan excluidos con :not(). El selector
+             de atributo tiene más especificidad que una clase, así que pelearle
+             con .nav-burger no alcanzaba y el SVG quedaba aplastado a 0px. */
+          a[style*="border-radius:99px"]:not(.icon-btn),
+          button[style*="border-radius:99px"]:not(.nav-burger):not(.icon-btn) {
+            /* min-height y no height: hay botones cuyo texto envuelve a dos
+               líneas y con altura fija quedaban apretados. */
+            min-height: 48px !important; height: auto !important;
+            padding: 11px 20px !important; font-size: 14.5px !important;
+          }
+          /* Esta sección lleva su propio padding interno, aparte del <section>. */
+          .op-inner { padding-top: 52px !important; padding-bottom: 52px !important; gap: 26px !important; }
+          .nav-burger, .icon-btn { width: 42px !important; height: 42px !important; }
+          [data-nav-inner] { padding: 12px 18px !important; }
+          [data-nav-word] { font-size: 19px !important; }
+
+          /* Hero. El gris de la derecha es la pared del ambiente, parte de la
+             foto: para sacarlo hay que encuadrar más cerca. scale + translateX
+             recortan por derecha y dejan la cabeza y el rodete centrados. */
+          .hero-img {
+            transform: scale(1.62) translateX(11%) !important;
+            object-position: 50% 20% !important;
+          }
+          .hero-media { max-width: 240px !important; }
+          .hero-note {
+            left: -14px !important; bottom: 26px !important;
+            padding: 12px 15px !important; max-width: 176px !important;
+            border-radius: 16px !important; gap: 5px !important;
+          }
+          .hero-note span:first-child { font-size: 9.5px !important; letter-spacing: 0.13em !important; }
+          .hero-note span:last-child { font-size: 12.5px !important; line-height: 1.35 !important; }
+          .g-hero { gap: 26px !important; }
+          .stat-n { font-size: 21px !important; }
+          .stat-d { font-size: 11.5px !important; }
+
+          /* Respiración: el orbe seguía midiendo 340px de alto reservado. */
+          .breath-wrap { height: 210px !important; }
+          .breath-box { width: 200px !important; height: 200px !important; }
+          .g-respirar { gap: 26px !important; }
+          .breath-benes { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 14px !important; }
+          .breath-benes span:first-child { font-size: 18px !important; }
+          .breath-benes span:last-child { font-size: 12px !important; }
+
+          /* Carrusel de fotos y videos: ~55% del alto de pantalla. */
+          :root { --reel-k: 0.56; }
+
+          /* Testimonios: se ve una tarjeta y asoma la siguiente. */
+          .story-card { width: 78vw !important; max-width: 300px !important; padding: 18px !important; gap: 9px !important; }
+          .story-lead { font-size: 17px !important; }
+          .story-rest { font-size: 13.5px !important; }
+
+          /* Meditación: más compacta y con la foto en formato menos alto,
+             para que la sección no se coma varias pantallas. */
+          .g-medit { gap: 26px !important; }
+          .medit-sub { font-size: 17px !important; line-height: 1.45 !important; }
+          .medit-body { gap: 14px !important; margin-top: 22px !important; }
+          .medit-body p { font-size: 15px !important; line-height: 1.65 !important; }
+          .medit-media { max-width: 100% !important; }
+          .medit-frame { height: 260px !important; }
+          #meditacion { padding-top: 48px !important; padding-bottom: 48px !important; }
+
+          .g-contacto { padding: 44px 20px !important; }
+          .g-guia { padding: 34px 20px !important; }
+        }
+
+        @media (max-width: 380px) {
+          .story-card { width: 82vw !important; }
+          .hero-media { max-width: 210px !important; }
         }
 
         /* Sin esto la página es hostil para quien tiene sensibilidad vestibular:
@@ -872,6 +974,7 @@ export default function YogaLanding() {
             <button
               type="button"
               aria-label="Cerrar menú"
+              className="icon-btn"
               onClick={() => {
                 setDrawerOpen(false)
                 drawerTriggerRef.current?.focus()
@@ -944,39 +1047,15 @@ export default function YogaLanding() {
                   Probá 1 minuto de calma
                 </Hov>
               </div>
-              <div data-reveal="stagger" className="g-herostats" style={s("display:grid;gap:24px 28px;padding-top:16px;width:100%;max-width:500px")}>
-                <div style={s("display:flex;flex-direction:column;gap:3px")}>
-                  <span style={s("font-family:'Playfair Display',serif;font-size:27px;line-height:1.1;color:#A41D2D")}>200 h</span>
-                  <span style={s("font-size:12.5px;line-height:1.4;color:#6B0505")}>
-                    Certificación
-                    <br />
-                    Ananda Yoga
-                  </span>
-                </div>
-                <div style={s("display:flex;flex-direction:column;gap:3px;border-left:1px solid rgba(164,29,45,0.18);padding-left:28px")}>
-                  <span style={s("font-family:'Playfair Display',serif;font-size:27px;line-height:1.1;color:#A41D2D")}>7 años</span>
-                  <span style={s("font-size:12.5px;line-height:1.4;color:#6B0505")}>
-                    de práctica e
-                    <br />
-                    investigación
-                  </span>
-                </div>
-                <div style={s("display:flex;flex-direction:column;gap:3px")}>
-                  <span style={s("font-family:'Playfair Display',serif;font-size:27px;line-height:1.1;color:#A41D2D")}>Neurociencia</span>
-                  <span style={s("font-size:12.5px;line-height:1.4;color:#6B0505")}>
-                    Universidad
-                    <br />
-                    de Palermo
-                  </span>
-                </div>
-                <div style={s("display:flex;flex-direction:column;gap:3px;border-left:1px solid rgba(164,29,45,0.18);padding-left:28px")}>
-                  <span style={s("font-family:'Playfair Display',serif;font-size:27px;line-height:1.1;color:#A41D2D")}>Online</span>
-                  <span style={s("font-size:12.5px;line-height:1.4;color:#6B0505")}>
-                    y presencial
-                    <br />
-                    en Buenos Aires
-                  </span>
-                </div>
+              {/* Sin <br /> forzados: en celular partían mal y alargaban la
+                  columna. El ancho lo define la grilla. */}
+              <div data-reveal="stagger" className="g-herostats" style={s("display:grid;gap:22px 26px;padding-top:12px;width:100%;max-width:500px")}>
+                {HERO_STATS.map((st, i) => (
+                  <div key={st.n} className={i % 2 === 1 ? "stat stat-div" : "stat"} style={s("display:flex;flex-direction:column;gap:2px")}>
+                    <span className="stat-n" style={s("font-family:'Playfair Display',serif;font-size:27px;line-height:1.1;color:#A41D2D")}>{st.n}</span>
+                    <span className="stat-d" style={s("font-size:12.5px;line-height:1.35;color:#6B0505")}>{st.d}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -985,9 +1064,12 @@ export default function YogaLanding() {
             <div data-reveal="scale" className="hero-media" style={s("position:relative")}>
               <div style={s("position:absolute;inset:-30px;border-radius:220px 220px 30px 30px;background:radial-gradient(circle at 40% 20%, rgba(255,214,234,0.9), rgba(253,236,236,0));filter:blur(30px)")} />
               <div ref={heroWrapRef} style={s("position:relative;border-radius:280px 280px 30px 30px;overflow:hidden;box-shadow:0 50px 90px -40px rgba(74,0,0,0.65)")}>
-                <img data-hero-img="" src={A("assets/louyoga.jpg")} alt="Lourdes Populin" style={s("width:100%;aspect-ratio:4/5;object-fit:cover;display:block;transform:scale(1.06);will-change:transform")} />
+                {/* scale 1.16 (antes 1.06): el parallax desplaza la imagen hasta
+                    40px hacia arriba y dejaba una franja vacía abajo del marco.
+                    object-position 50% 18% conserva el rodete. */}
+                <img data-hero-img="" className="hero-img" src={A("assets/louyoga.jpg")} alt="Lourdes Populin" style={s("width:100%;aspect-ratio:4/5;object-fit:cover;object-position:50% 18%;display:block;transform:scale(1.16);will-change:transform")} />
               </div>
-              <div style={s("position:absolute;left:-40px;bottom:62px;background:#fff;border-radius:22px;padding:18px 22px;box-shadow:0 30px 60px -26px rgba(74,0,0,0.5);display:flex;flex-direction:column;gap:7px;max-width:228px;animation:floaty 7s ease-in-out infinite")}>
+              <div className="hero-note" style={s("position:absolute;left:-40px;bottom:62px;background:#fff;border-radius:22px;padding:18px 22px;box-shadow:0 30px 60px -26px rgba(74,0,0,0.5);display:flex;flex-direction:column;gap:7px;max-width:228px;animation:floaty 7s ease-in-out infinite")}>
                 <span style={s("font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#A41D2D")}>Primera sesión</span>
                 <span style={s("font-size:14.5px;line-height:1.42;color:#4A0000")}>Charlamos 15 min, armamos tu plan y practicás. Sin compromiso.</span>
               </div>
@@ -1119,8 +1201,8 @@ export default function YogaLanding() {
         <section id="respirar" style={s("background:#A41D2D;padding:104px 34px;position:relative;overflow:hidden")}>
           <div style={s("position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 50% 40%, rgba(255,255,255,0.14), transparent 70%)")} />
           <div className="g-respirar" style={s("position:relative;max-width:1080px;margin:0 auto;display:grid;gap:70px;align-items:center")}>
-            <div data-reveal="scale" style={s("display:flex;align-items:center;justify-content:center;height:340px")}>
-              <div style={s("position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center")}>
+            <div data-reveal="scale" className="breath-wrap" style={s("display:flex;align-items:center;justify-content:center;height:340px")}>
+              <div className="breath-box" style={s("position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center")}>
                 <div style={s("position:absolute;inset:6px;border-radius:99px;border:1px solid rgba(255,255,255,0.22)")} />
                 <div ref={breathOrbRef} style={s("position:absolute;width:250px;height:250px;border-radius:99px;background:radial-gradient(circle at 50% 46%, #FFF7C9 0%, #FFE9A8 16%, #FFD3C4 38%, #FFB9CE 62%, #FFA6C4 82%, #FF9BBE 100%);box-shadow:0 0 90px rgba(255,214,234,0.55);will-change:transform")} />
                 <div ref={breathOrbitRef} style={s("position:absolute;inset:0;will-change:transform")}>
@@ -1138,7 +1220,7 @@ export default function YogaLanding() {
               <p style={s("margin:0;font-size:18px;line-height:1.6;color:#FFE6E6;max-width:490px")}>
                 Seguí el círculo: inhalá 4, retené 4, exhalá 6. Una exhalación más larga que la inhalación activa tu sistema nervioso parasimpático — la misma respiración con la que abrimos cada clase.
               </p>
-              <div style={s("display:flex;gap:30px;padding-top:8px;flex-wrap:wrap")}>
+              <div className="breath-benes" style={s("display:flex;gap:30px;padding-top:8px;flex-wrap:wrap")}>
                 <div style={s("display:flex;flex-direction:column")}>
                   <span style={s("font-family:'Playfair Display',serif;font-size:25px;color:#fff")}>↓ Cortisol</span>
                   <span style={s("font-size:13px;color:#FFC3DE")}>menos estrés agudo</span>
@@ -1152,25 +1234,6 @@ export default function YogaLanding() {
                   <span style={s("font-size:13px;color:#FFC3DE")}>te dormís más rápido</span>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="metodo" style={s("background:#FFF5F5;padding:100px 34px")}>
-          <div style={s("max-width:1320px;margin:0 auto")}>
-            <div data-reveal="up" style={s("display:flex;flex-direction:column;gap:16px;max-width:660px;margin-bottom:56px")}>
-              <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Cómo empezamos</span>
-              <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(29px,3.6vw,46px);line-height:1.04;letter-spacing:-0.03em;color:#4A0000")}>Tu primera clase, sin misterio</h2>
-              <p style={s("margin:0;font-size:17.5px;line-height:1.55;color:#6B0505")}>Nadie empieza flexible ni concentrado. Este es el camino exacto desde tu mensaje hasta tu primera práctica.</p>
-            </div>
-            <div data-reveal="stagger" className="g-metodo" style={s("display:grid;gap:24px")}>
-              {STEPS.map((st) => (
-                <Hov key={st.n} css="background:#fff;border-radius:26px;padding:40px 34px;display:flex;flex-direction:column;gap:15px;border:1px solid #F3DADA;box-shadow:0 20px 44px -30px rgba(74,0,0,0.5);transition:transform .4s cubic-bezier(.22,.61,.36,1),box-shadow .4s" hover="transform:translateY(-6px);box-shadow:0 34px 64px -34px rgba(74,0,0,0.6)">
-                  <span style={s("font-family:'Playfair Display',serif;font-size:clamp(32px,3.6vw,44px);line-height:1;color:#E8C5C5")}>{st.n}</span>
-                  <h3 style={s("margin:0;font-size:20px;font-weight:600;color:#A41D2D")}>{st.t}</h3>
-                  <p style={s("margin:0;font-size:15.5px;line-height:1.6;color:#6B0505")}>{st.d}</p>
-                </Hov>
-              ))}
             </div>
           </div>
         </section>
@@ -1192,8 +1255,11 @@ export default function YogaLanding() {
             <div style={s("display:flex;flex-direction:column;gap:28px")}>
               <div style={s("overflow:hidden;width:100%;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 96%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 96%,transparent 100%)")}>
                 <div ref={pauseOnHover} style={s("display:flex;align-items:flex-start;gap:16px;padding-right:16px;width:max-content;animation:reelscroll 96s linear infinite")}>
+                  {/* El ancho de cada columna lo calcula JS a partir de REEL_H.
+                      --reel-w + --reel-k escalan alto y ancho juntos, así la
+                      proporción se mantiene al achicar en celular. */}
                   {REEL_LOOP.map((col, ci) => (
-                    <div key={ci} style={{ ...s("flex:none;height:460px;display:flex;flex-direction:column;gap:16px"), width: col.w }}>
+                    <div key={ci} className="reel-col" style={{ ...s("flex:none;display:flex;flex-direction:column;gap:16px"), ["--reel-w" as string]: col.w } as React.CSSProperties}>
                       {col.items.map((m, mi) => (
                         <div key={mi} style={s("position:relative;flex:1;min-height:0;border-radius:22px;overflow:hidden;background:#2A0007;box-shadow:0 30px 58px -34px rgba(74,0,0,0.7)")}>
                           {m.isVideo ? (
@@ -1219,22 +1285,20 @@ export default function YogaLanding() {
         </section>
 
         <section id="opiniones" style={s("position:relative;background:#4A0000")}>
-          <div style={s("display:flex;flex-direction:column;gap:40px;padding:104px 0 112px")}>
+          <div className="op-inner" style={s("display:flex;flex-direction:column;gap:40px;padding:104px 0 112px")}>
             <div style={s("max-width:1320px;width:100%;margin:0 auto;padding:0 34px;display:flex;align-items:flex-end;justify-content:space-between;gap:48px;flex-wrap:wrap")}>
               <div style={s("display:flex;flex-direction:column;gap:15px;max-width:600px")}>
                 <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#FF8EBE")}>Opiniones reales</span>
                 <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(32px,4vw,54px);line-height:1.04;letter-spacing:-0.03em;color:#fff")}>Gente parecida a vos</h2>
               </div>
-              <div style={s("display:flex;flex-direction:column;gap:6px;align-items:flex-end")}>
-                <span style={s("font-family:'Playfair Display',serif;font-size:38px;line-height:1;color:#fff")}>{String(STORIES.length).padStart(2, "0")}</span>
-                <span style={s("font-size:14px;color:rgba(255,255,255,0.5)")}>historias reales</span>
-              </div>
             </div>
 
             <div style={s("overflow:hidden;width:100%")}>
               <div ref={pauseOnHover} style={s("display:flex;gap:18px;padding-right:18px;width:max-content;will-change:transform;animation:reelscroll 72s linear infinite;animation-direction:reverse")}>
+                {/* Sin height fija: al ser un contenedor flex, todas se igualan
+                    a la más alta y desaparece el bloque blanco vacío. */}
                 {STORY_LOOP.map((st, i) => (
-                  <Hov key={i} tag="article" css="position:relative;flex:none;width:352px;height:452px;border-radius:26px;overflow:hidden;background:#fff;display:flex;flex-direction:column;gap:18px;padding:30px;box-shadow:0 40px 80px -46px rgba(0,0,0,0.9);transition:transform .45s cubic-bezier(.22,.61,.36,1),box-shadow .45s" hover="transform:translateY(-8px);box-shadow:0 54px 94px -44px rgba(0,0,0,0.95)">
+                  <Hov key={i} tag="article" className="story-card" css="position:relative;flex:none;border-radius:22px;overflow:hidden;background:#fff;display:flex;flex-direction:column;gap:12px;box-shadow:0 40px 80px -46px rgba(0,0,0,0.9);transition:transform .45s cubic-bezier(.22,.61,.36,1),box-shadow .45s" hover="transform:translateY(-8px);box-shadow:0 54px 94px -44px rgba(0,0,0,0.95)">
                     <div style={s("display:flex;align-items:center;gap:14px;flex:none")}>
                       {st.avatar ? (
                         <img src={A(st.avatar)} alt={st.author} style={s("width:52px;height:52px;border-radius:99px;object-fit:cover;flex:none;border:2px solid #FDECEC")} />
@@ -1260,8 +1324,8 @@ export default function YogaLanding() {
 
                     <div style={s("width:100%;height:1px;background:#F3DADA;flex:none")} />
 
-                    <p style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(19px,1.5vw,22px);line-height:1.28;letter-spacing:-0.01em;color:#4A0000;flex:none")}>“{st.lead}”</p>
-                    <p style={s("margin:0;font-size:14.5px;line-height:1.62;color:#6B0505;overflow:hidden")}>{st.rest}</p>
+                    <p className="story-lead" style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(17px,1.4vw,20px);line-height:1.26;letter-spacing:-0.01em;color:#4A0000;flex:none")}>“{st.lead}”</p>
+                    <p className="story-rest" style={s("margin:0;font-size:14px;line-height:1.55;color:#6B0505")}>{st.rest}</p>
                   </Hov>
                 ))}
               </div>
@@ -1392,6 +1456,57 @@ export default function YogaLanding() {
               ))}
             </div>
           </div>
+        </section>
+
+        {/* Fondo #FFF8F8: #FDECEC choca con Clases (arriba) y #FFF5F5 con
+            Contacto (abajo). Es el tono claro que ya usa el gradiente del hero. */}
+        <section id="meditacion" style={s("background:#FFF8F8;padding:64px 34px")}>
+          <div className="g-medit" style={s("max-width:1180px;margin:0 auto;display:grid;gap:52px;align-items:center")}>
+            <div data-reveal="up" style={s("display:flex;flex-direction:column")}>
+              <span style={s("font-size:11.5px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Meditación</span>
+
+              <h2 style={s("margin:12px 0 0;font-family:'Playfair Display',serif;font-size:clamp(28px,3.1vw,42px);line-height:1.08;letter-spacing:-0.03em;color:#4A0000")}>¿Querés aprender a meditar?</h2>
+
+              <span style={s("display:block;width:56px;height:1px;background:rgba(164,29,45,0.35);margin:16px 0")} />
+
+              {/* Subtítulo con peso propio, pero en Geist para no competir con
+                  el Playfair del título. */}
+              <p className="medit-sub" style={s("margin:0;font-size:19px;line-height:1.4;color:#4A0000;max-width:28em;font-weight:500;text-wrap:pretty")}>
+                Meditación para mentes curiosas, a las que les gusta entender el porqué y el cómo de las cosas.
+              </p>
+
+              {/* max-width en em fija el ancho de lectura (~60 caracteres). */}
+              <div className="medit-body" style={s("display:flex;flex-direction:column;gap:12px;margin-top:18px;max-width:34em")}>
+                <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
+                  Para algunas personas, meditar tiene más que ver con entrenar la atención. Para otras, con aprender a observar pensamientos, emociones y sensaciones sin juzgarlos ni quedar atrapadas en ellos. Y ninguna de las dos formas está equivocada.
+                </p>
+                <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
+                  Existen muchísimas prácticas y maneras de meditar. Por eso, la idea no es enseñarte una única técnica, sino charlar, entender qué buscás y practicar diferentes formas hasta encontrar la que más se asocie con vos.
+                </p>
+                <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
+                  Ya sea que quieras entrenar tu atención, mejorar tu concentración, trabajar la memoria, sentir mayor calma o simplemente aprender a relacionarte de otra manera con lo que pasa en tu mente, vamos a construir una práctica que tenga sentido para vos.
+                </p>
+              </div>
+            </div>
+
+            {/* La altura la fija el contenedor y la imagen lo llena. Con
+                aspect-ratio 4/5 la foto medía 800px de alto y era lo que
+                empujaba la sección más allá de una pantalla. */}
+            <div data-reveal="scale" className="medit-media" style={s("position:relative")}>
+              <div className="medit-frame" style={s("position:relative;border-radius:28px;overflow:hidden;background:#E8DFD2;box-shadow:0 44px 90px -50px rgba(74,0,0,0.55)")}>
+                <img
+                  className="medit-img"
+                  src={A("assets/meditacion-lago.png")}
+                  alt="Práctica de yoga junto al río al atardecer"
+                  loading="lazy"
+                  style={s("width:100%;height:100%;object-fit:cover;object-position:50% 76%;display:block")}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Espacio reservado para el bloque bordó del programa de tres semanas.
+              Sin contenido todavía: se define más adelante. */}
         </section>
 
         <section id="contacto" style={s("position:relative;overflow:hidden;background:#FFF5F5;padding:120px 34px")}>

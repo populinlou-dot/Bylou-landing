@@ -907,21 +907,22 @@ export default function YogaLanding() {
           [data-nav-inner] { padding: 12px 18px !important; }
           [data-nav-word] { font-size: 19px !important; }
 
-          /* Hero. El gris de la derecha es la pared del ambiente, parte de la
-             foto: para sacarlo hay que encuadrar más cerca. scale + translateX
-             recortan por derecha y dejan la cabeza y el rodete centrados. */
+          /* Hero: mismo encuadre que en escritorio. El scale(1.62) anterior
+             recortaba tanto que solo se veía la cara; con 1.16 se ve el cuerpo
+             y la composición queda igual, solo que más angosta. El marco no
+             cambia de tamaño. */
           .hero-img {
-            transform: scale(1.62) translateX(11%) !important;
-            object-position: 50% 20% !important;
+            transform: scale(1.16) !important;
+            object-position: 50% 18% !important;
           }
           .hero-media { max-width: 240px !important; }
           .hero-note {
-            left: -14px !important; bottom: 26px !important;
-            padding: 12px 15px !important; max-width: 176px !important;
-            border-radius: 16px !important; gap: 5px !important;
+            left: -10px !important; bottom: 20px !important;
+            padding: 9px 12px !important; max-width: 146px !important;
+            border-radius: 13px !important; gap: 3px !important;
           }
-          .hero-note span:first-child { font-size: 9.5px !important; letter-spacing: 0.13em !important; }
-          .hero-note span:last-child { font-size: 12.5px !important; line-height: 1.35 !important; }
+          .hero-note span:first-child { font-size: 8.5px !important; letter-spacing: 0.12em !important; }
+          .hero-note span:last-child { font-size: 11px !important; line-height: 1.32 !important; }
           .g-hero { gap: 26px !important; }
           .stat-n { font-size: 21px !important; }
           .stat-d { font-size: 11.5px !important; }

@@ -163,7 +163,7 @@ const PHASES = [
 ]
 const CYCLE = PHASES.reduce((a, p) => a + p.dur, 0)
 
-const REEL_H = 460
+const REEL_H = 430
 const vid = (n: number) => ({ type: "video" as const, src: `assets/video-${n}.mp4`, ratio: 9 / 16 })
 const pic = (src: string, ratio: number) => ({ type: "photo" as const, src: `assets/${src}`, ratio })
 
@@ -340,6 +340,7 @@ const PLANS: Plan[] = [
 ]
 
 const IG_LINK = ig("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba 🌸")
+const IG_MEDIT = ig("Hola Lou! Vengo de la web y quiero más información sobre meditación 🌸")
 const MAIL_LINK = mail("Consulta desde la web — Yoga ByLou", "Hola Lou!\n\nTe escribo desde la web. Me interesa:\n\n")
 
 const SHOW_PRICES = true
@@ -357,6 +358,7 @@ export default function YogaLanding() {
   const rootRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
   const panelWrapRef = useRef<HTMLDivElement>(null)
+  const panelCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelTriggerRef = useRef<HTMLButtonElement>(null)
   const drawerTriggerRef = useRef<HTMLButtonElement>(null)
   const heroWrapRef = useRef<HTMLDivElement>(null)
@@ -368,6 +370,20 @@ export default function YogaLanding() {
   const breathCountRef = useRef<HTMLSpanElement>(null)
 
   const active = INTENTS.find((i) => i.key === intent) || INTENTS[0]
+
+  // El cierre por hover se retrasa: sin esto, cualquier microsalida del puntero
+  // (o un movimiento diagonal rápido) cierra el panel antes de poder usarlo.
+  const openPanel = () => {
+    if (panelCloseTimer.current) clearTimeout(panelCloseTimer.current)
+    setPanelOpen(true)
+  }
+  const closePanelSoon = () => {
+    if (panelCloseTimer.current) clearTimeout(panelCloseTimer.current)
+    panelCloseTimer.current = setTimeout(() => setPanelOpen(false), 160)
+  }
+  useEffect(() => () => {
+    if (panelCloseTimer.current) clearTimeout(panelCloseTimer.current)
+  }, [])
 
   const registerVideo = useCallback((el: HTMLVideoElement | null) => {
     if (!el || (el as any).__wired) return
@@ -463,7 +479,7 @@ export default function YogaLanding() {
           nav.style.background = isCondensed ? "rgba(253,236,236,0.82)" : "transparent"
           nav.style.backdropFilter = isCondensed ? "blur(18px)" : "none"
           nav.style.boxShadow = isCondensed ? "0 1px 0 rgba(164,29,45,0.12)" : "none"
-          if (inner) inner.style.padding = isCondensed ? "13px 34px" : "26px 34px"
+          if (inner) inner.style.padding = isCondensed ? "10px 34px" : "16px 34px"
           if (word) word.style.fontSize = isCondensed ? "20px" : "25px"
           if (logo) {
             logo.style.width = isCondensed ? "27px" : "34px"
@@ -683,6 +699,54 @@ export default function YogaLanding() {
         @keyframes reelscroll { from{transform:translateX(-50%)} to{transform:translateX(0)} }
         @keyframes floaty { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-9px)} }
 
+        /* Colores de acento. El bordó (#A41D2D), los rosas pálidos (#FDECEC,
+           #FFF5F5) y los oscuros (#6B0505, #4A0000) ya existían y se reutilizan
+           tal cual. Estos cuatro son los únicos valores nuevos: manteca como
+           luz, fucsia como acento expresivo. */
+        :root {
+          --butter: #EAD99A;
+          /* Variante para manteca sobre fondo claro: el #EAD99A se lava
+             sobre blanco. Sigue siendo vainilla, no dorado. */
+          --butter-ink: #D2B565;
+          --butter-soft: #F7EFD5;
+          --butter-wash: #FCF7E8;
+          --fucsia: #D75B86;
+
+          /* Escala de radios: tres decisiones reutilizadas en vez de un valor
+             distinto por elemento. */
+          --r-sm: 7px;   /* etiquetas */
+          --r-md: 11px;  /* botones */
+          --r-lg: 18px;  /* fotografía */
+          --r-xl: 40px;  /* grandes superficies contenidas */
+
+          /* Ritmo vertical. Antes había 96/104/112/120/136px repartidos sin
+             lógica; ahora cada sección elige un escalón según su peso. */
+          --sp-xl: 84px; /* sección protagonista */
+          --sp-lg: 66px; /* sección normal */
+          --sp-md: 50px; /* sección compacta */
+          --sp-sm: 38px; /* secciones encadenadas */
+
+          /* Anchos de contenido, para dejar de tener un max-width por sección. */
+          --content-narrow: 1080px;
+          --content-max: 1240px;
+          --content-wide: 1380px;
+
+          /* El bordó de marca sin tocar, más una variante para superficies
+             grandes: el #A41D2D a pantalla completa cansa la vista. */
+          --burgundy-primary: #A41D2D;
+          --burgundy-surface: #9B2B3A;
+        }
+
+        @media (max-width: 900px) {
+          :root {
+            --sp-xl: 56px;
+            --sp-lg: 46px;
+            --sp-md: 36px;
+            --sp-sm: 28px;
+            --r-xl: 26px;
+          }
+        }
+
         /* Los grids viven en CSS y no en el atributo style: los estilos inline
            ganan por especificidad y no habría forma de pisarlos sin !important. */
         .g-hero      { grid-template-columns: 1.15fr 0.85fr; }
@@ -691,7 +755,25 @@ export default function YogaLanding() {
         .g-ayuda     { grid-template-columns: 1.28fr 0.72fr; }
         .g-respirar  { grid-template-columns: 0.88fr 1.12fr; }
         .g-reelhead  { grid-template-columns: 1fr auto; }
-        .g-acerca    { grid-template-columns: 0.82fr 1.18fr; }
+        .g-acerca    { grid-template-columns: 42fr 58fr; align-items: center; gap: 44px; }
+
+        /* La altura del video la define la columna derecha, no un clamp en vh:
+           el grid se estira y el video toma el alto de la fila. Así quedan
+           alineados ópticamente en cualquier viewport. */
+        @media (min-width: 1101px) {
+          .g-acerca { align-items: stretch; }
+          /* Sin offset: el video arranca en el tope de la fila, a la altura de
+             la tarjeta de perfil, y llega hasta la base de las tres tarjetas. */
+          .about-slot {
+            flex: 1; min-height: 0; margin-top: 0 !important;
+            display: flex; align-items: stretch; justify-content: center;
+          }
+          .about-video {
+            height: 100% !important;
+            width: auto !important;
+            max-width: 100% !important;
+          }
+        }
         .g-benefits  { grid-template-columns: repeat(3,1fr); }
         .g-clases    { grid-template-columns: repeat(3,1fr); }
         .g-contacto  { grid-template-columns: 1.1fr 0.9fr; }
@@ -699,22 +781,59 @@ export default function YogaLanding() {
         /* 45 / 55 a favor de la foto. La altura del marco se acota con vh para
            que la sección entre en una pantalla, con topes por si el monitor es
            muy alto o muy bajo. */
-        .g-medit     { grid-template-columns: 45fr 55fr; }
-        .medit-frame { height: clamp(360px, 56vh, 500px); }
+        /* 56/44 a favor del texto: la columna angosta anterior partía los
+           párrafos en muchas líneas cortas y eso era la altura de más. */
+        .g-medit     { grid-template-columns: 56fr 44fr; align-items: stretch; }
+        .medit-frame { min-height: 400px; }
+        /* Colchón contra la navbar fija: separa sin desperdiciar viewport. */
+        /* El header es fijo (~72px): sin esto el ancla deja el encabezado tapado. */
+        #meditacion, #acerca, #respirar, #clases, #opiniones, #contacto, #faq, #ayuda { scroll-margin-top: 88px; }
         .g-footer    { grid-template-columns: 1.4fr 1fr; }
 
         /* Hero: la columna de texto manda, la foto acompaña. */
         .hero-media { max-width: 400px; justify-self: start; width: 100%; }
-        .hero-sec   { padding: 150px 34px 84px; }
+        .hero-sec   { padding: 96px 34px 56px; }
         /* Sin esto el nav fijo tapa el encabezado al saltar por un ancla. */
         section[id]  { scroll-margin-top: 104px; }
         /* Contenedor más angosto que el resto (1320px): con el ancho completo
            el texto y la foto quedaban pegados a cada borde. */
-        .g-hero     { gap: 48px; max-width: 1080px; }
+        .g-hero     { gap: 44px; max-width: var(--content-narrow); }
 
         @media (max-width: 1100px) {
           /* Apilado: la foto se centra y se achica todavía más. */
           .hero-media { max-width: 340px; justify-self: center; }
+        }
+
+        /* Microinteracción: la flecha del CTA de Meditación avanza 4px.
+           El bloque prefers-reduced-motion de más abajo la neutraliza. */
+        .medit-btn:hover .medit-arrow { transform: translateX(4px); }
+
+        /* Puente invisible sobre los 12px que separan el nav del panel. Esa
+           franja no pertenecía a ninguno de los dos, así que al cruzarla se
+           disparaba mouseleave y el panel se cerraba antes de poder usarlo.
+           Al ser un pseudo-elemento del panel, el puntero nunca "sale". */
+        #nav-panel::before {
+          content: "";
+          position: absolute;
+          left: 0; right: 0; top: -14px;
+          height: 14px;
+        }
+
+        /* Pantallas de escritorio bajas (1366×768 y similares): el problema no
+           es el ancho sino el alto, así que se ajusta por max-height y no por
+           un breakpoint de ancho. */
+        @media (min-width: 1101px) and (max-height: 820px) {
+          #acerca { padding-top: 30px !important; padding-bottom: 30px !important; }
+          #acerca h2 { font-size: clamp(26px, 2.9vw, 38px) !important; }
+          /* Sin override de altura: el video la toma de la fila del grid.
+             Fijarla acá pisaba el height:100% y lo dejaba corto. */
+        }
+
+        /* Superficies contenidas: el fondo claro rodea la masa de color y la
+           transición deja de ser "termina una franja y empieza otra". */
+        @media (max-width: 900px) {
+          .surface-burgundy { padding: 34px 22px !important; }
+          .op-inner { padding: 34px 0 38px !important; gap: 24px !important; }
         }
 
         .skip-link {
@@ -740,7 +859,7 @@ export default function YogaLanding() {
         }
 
         /* El carrusel escala alto y ancho con el mismo factor. */
-        .reel-col { width: calc(var(--reel-w) * var(--reel-k, 1)); height: calc(460px * var(--reel-k, 1)); }
+        .reel-col { width: calc(var(--reel-w) * var(--reel-k, 1)); height: calc(430px * var(--reel-k, 1)); }
         .story-card { width: 352px; padding: 26px; }
         /* Divisoria de la segunda columna de datos del hero (era inline). */
         .stat-div { border-left: 1px solid rgba(164,29,45,0.18); padding-left: 26px; }
@@ -831,6 +950,15 @@ export default function YogaLanding() {
           .medit-body p { font-size: 15px !important; line-height: 1.65 !important; }
           .medit-media { max-width: 100% !important; }
           .medit-frame { height: 260px !important; }
+          /* En celular manda el ancho y el alto lo deriva el 9/16. Fijando el
+             alto, el ancho calculado superaba el viewport y desbordaba. */
+          .about-video { width: min(100%, 320px) !important; height: auto !important; }
+          /* Sin esto las columnas del grid no se dejan encoger por debajo de
+             su contenido y empujan el ancho de la página. */
+          .g-acerca > * { min-width: 0; }
+          /* Botón a todo el ancho para que sea cómodo de tocar. */
+          .medit-cta { margin-top: 18px !important; gap: 10px !important; align-self: stretch; }
+          .medit-btn { width: 100% !important; height: 46px !important; font-size: 14.5px !important; }
           #meditacion { padding-top: 48px !important; padding-bottom: 48px !important; }
 
           .g-contacto { padding: 44px 20px !important; }
@@ -859,7 +987,7 @@ export default function YogaLanding() {
           Saltar al contenido
         </a>
         <header ref={navRef} style={s("position:fixed;top:0;left:0;right:0;z-index:90;transition:transform .5s cubic-bezier(.22,.61,.36,1),background .4s,box-shadow .4s,backdrop-filter .4s;will-change:transform")}>
-          <div data-nav-inner="" style={s("max-width:1320px;margin:0 auto;padding:26px 34px;display:flex;align-items:center;justify-content:space-between;gap:28px;transition:padding .4s cubic-bezier(.22,.61,.36,1)")}>
+          <div data-nav-inner="" style={s("max-width:1320px;margin:0 auto;padding:16px 34px;display:flex;align-items:center;justify-content:space-between;gap:28px;transition:padding .4s cubic-bezier(.22,.61,.36,1)")}>
             <a href="#inicio" style={s("display:flex;align-items:center;gap:12px;flex-shrink:0")}>
               <img data-nav-logo="" src={A("assets/ginkgo.png")} alt="" style={s("width:34px;height:34px;flex-shrink:0;transition:width .4s,height .4s")} />
               <span data-nav-word="" style={s("font-family:'Playfair Display',serif;font-size:25px;font-weight:500;letter-spacing:-0.015em;color:#4A0000;white-space:nowrap;transition:font-size .4s")}>Yoga ByLou</span>
@@ -869,8 +997,9 @@ export default function YogaLanding() {
               aria-label="Principal"
               className="nav-pill"
               ref={panelWrapRef}
-              onMouseLeave={() => setPanelOpen(false)}
-              style={s("position:relative;display:flex;align-items:center;gap:6px;padding:7px;border-radius:99px;background:rgba(255,255,255,0.72);border:1px solid rgba(164,29,45,0.12);backdrop-filter:blur(16px);box-shadow:0 8px 30px -18px rgba(74,0,0,0.5)")}
+              onMouseLeave={closePanelSoon}
+              onMouseEnter={() => { if (panelCloseTimer.current) clearTimeout(panelCloseTimer.current) }}
+              style={s("position:relative;display:flex;align-items:center;gap:6px;padding:5px;border-radius:14px;background:rgba(255,255,255,0.78);border:1px solid rgba(164,29,45,0.12);backdrop-filter:blur(16px);box-shadow:0 8px 30px -18px rgba(74,0,0,0.5)")}
             >
               {NAV_LINKS.map((l) => {
                 const on = activeSection === l.key
@@ -881,11 +1010,13 @@ export default function YogaLanding() {
                     href={l.href}
                     data-nav-link={l.key}
                     aria-current={on ? "true" : undefined}
-                    css="padding:11px 19px;border-radius:99px;font-size:14.5px;font-weight:500;transition:background .25s,color .25s;white-space:nowrap"
+                    css="padding:9px 16px;border-radius:9px;font-size:14px;font-weight:500;transition:background .25s,color .25s;white-space:nowrap"
                     hover="background:#FDECEC;color:#A41D2D"
                     style={on ? { background: "#FDECEC", color: "#A41D2D", fontWeight: 600 } : { color: "#6B0505" }}
                   >
                     {l.label}
+                    {/* Punto fucsia: marca la sección activa sin sumar otro color de fondo. */}
+                    {on && <span style={s("display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--fucsia);margin-left:7px;vertical-align:middle")} />}
                   </Hov>
                 )
               })}
@@ -897,8 +1028,8 @@ export default function YogaLanding() {
                 aria-expanded={panelOpen}
                 aria-controls="nav-panel"
                 onClick={() => setPanelOpen((v) => !v)}
-                onMouseEnter={() => setPanelOpen(true)}
-                style={s("display:inline-flex;align-items:center;gap:8px;padding:11px 19px;border-radius:99px;font-size:14.5px;font-weight:500;color:#6B0505;white-space:nowrap;background:transparent;border:0;font-family:inherit;cursor:pointer")}
+                onMouseEnter={openPanel}
+                style={s("display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:500;color:#6B0505;white-space:nowrap;background:transparent;border:0;font-family:inherit;cursor:pointer")}
               >
                 Explorar
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "transform .3s", transform: panelOpen ? "rotate(180deg)" : "none" }}>
@@ -909,6 +1040,8 @@ export default function YogaLanding() {
               <div
                 id="nav-panel"
                 data-nav-panel=""
+                onMouseEnter={openPanel}
+                onMouseLeave={closePanelSoon}
                 style={{
                   ...s("position:absolute;top:calc(100% + 12px);right:0;width:330px;padding:8px;border-radius:20px;background:#fff;border:1px solid rgba(164,29,45,0.12);box-shadow:0 30px 70px -34px rgba(74,0,0,0.5);transform-origin:top right;transition:opacity .28s cubic-bezier(.22,.61,.36,1),transform .28s cubic-bezier(.22,.61,.36,1),visibility .28s"),
                   opacity: panelOpen ? 1 : 0,
@@ -945,7 +1078,7 @@ export default function YogaLanding() {
               </svg>
             </button>
 
-            <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" className="nav-cta" css="position:relative;overflow:hidden;flex-shrink:0;display:inline-flex;align-items:center;gap:11px;height:52px;padding:0 26px;border-radius:99px;background:#A41D2D;color:#fff;font-size:15px;font-weight:600;white-space:nowrap;box-shadow:0 14px 34px -14px rgba(164,29,45,0.85);transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-2px);box-shadow:0 22px 44px -16px rgba(164,29,45,0.9)">
+            <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" className="nav-cta" css="position:relative;overflow:hidden;flex-shrink:0;display:inline-flex;align-items:center;gap:11px;height:46px;padding:0 22px;border-radius:var(--r-md);background:#A41D2D;color:#fff;font-size:14.5px;font-weight:600;white-space:nowrap;box-shadow:0 6px 18px -10px rgba(164,29,45,0.7);transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-2px);box-shadow:0 22px 44px -16px rgba(164,29,45,0.9)">
               <span data-cta-label="" style={s("position:relative")}>Reservar clase de prueba</span>
               <ArrowIcon size={16} />
             </Hov>
@@ -1027,6 +1160,8 @@ export default function YogaLanding() {
               <span data-reveal="up" style={s("display:inline-flex;align-items:center;gap:10px;padding:9px 18px 9px 12px;border-radius:99px;background:rgba(255,255,255,0.9);border:1px solid rgba(164,29,45,0.16);font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#A41D2D;white-space:nowrap;backdrop-filter:blur(8px)")}>
                 <img src={A("assets/ginkgo.png")} alt="" style={s("width:17px;height:17px;flex-shrink:0")} />
                 Yoga + neurociencia aplicada
+                {/* Único acento del hero: un punto manteca al cierre del badge. */}
+                <span style={s("width:5px;height:5px;border-radius:99px;background:var(--butter);flex:none;margin-left:2px")} />
               </span>
               {/* Reveal "up" y no "mask": el clip-path del mask recortaba la
                   frase mientras animaba, sobre todo la itálica de Playfair. */}
@@ -1088,7 +1223,7 @@ export default function YogaLanding() {
           </div>
         </div>
 
-        <section style={s("background:#FDECEC;padding:96px 34px")}>
+        <section style={s("background:#FDECEC;padding:var(--sp-lg) 34px")}>
           <div ref={secretRef} style={s("max-width:1320px;margin:0 auto")}>
             <div data-secret-card="" style={s("position:relative;overflow:hidden;border-radius:34px;background:#4A0000;box-shadow:0 40px 90px -50px rgba(74,0,0,0.9)")}>
               <img data-secret-img="" src={A("assets/lou-practica-2.jpg")} alt="" style={s("position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.24;transform:scale(1.08);transition:opacity .8s cubic-bezier(.22,.61,.36,1),transform 1.1s cubic-bezier(.22,.61,.36,1);will-change:transform")} />
@@ -1128,7 +1263,7 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="ayuda" style={s("background:#FDECEC;padding:40px 34px 100px")}>
+        <section id="ayuda" style={s("background:#FDECEC;padding:var(--sp-sm) 34px var(--sp-lg)")}>
           <div style={s("max-width:1320px;margin:0 auto")}>
             <div data-reveal="up" style={s("display:flex;flex-direction:column;gap:16px;max-width:680px;margin-bottom:46px")}>
               <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Empecemos por vos</span>
@@ -1198,9 +1333,12 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="respirar" style={s("background:#A41D2D;padding:104px 34px;position:relative;overflow:hidden")}>
+        {/* El bordó deja de ir de borde a borde y pasa a ser una pieza
+            contenida con radio. La superficie usa la variante suavizada. */}
+        <section id="respirar" style={s("background:#FFF5F5;padding:var(--sp-lg) 26px")}>
+          <div className="surface-burgundy" style={s("position:relative;overflow:hidden;max-width:var(--content-max);margin:0 auto;border-radius:var(--r-xl);background:var(--burgundy-surface);padding:44px 44px")}>
           <div style={s("position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 50% 40%, rgba(255,255,255,0.14), transparent 70%)")} />
-          <div className="g-respirar" style={s("position:relative;max-width:1080px;margin:0 auto;display:grid;gap:70px;align-items:center")}>
+          <div className="g-respirar" style={s("position:relative;max-width:1080px;margin:0 auto;display:grid;gap:56px;align-items:center")}>
             <div data-reveal="scale" className="breath-wrap" style={s("display:flex;align-items:center;justify-content:center;height:340px")}>
               <div className="breath-box" style={s("position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center")}>
                 <div style={s("position:absolute;inset:6px;border-radius:99px;border:1px solid rgba(255,255,255,0.22)")} />
@@ -1236,11 +1374,12 @@ export default function YogaLanding() {
               </div>
             </div>
           </div>
+          </div>
         </section>
 
-        <section style={s("background:#FDECEC;padding:104px 34px 112px")}>
+        <section style={s("background:#FDECEC;padding:var(--sp-md) 34px")}>
           <div style={s("max-width:1320px;margin:0 auto")}>
-            <div data-reveal="up" className="g-reelhead" style={s("display:grid;gap:56px;align-items:end;margin-bottom:56px")}>
+            <div data-reveal="up" className="g-reelhead" style={s("display:grid;gap:40px;align-items:end;margin-bottom:24px")}>
               <div style={s("display:flex;flex-direction:column;gap:18px")}>
                 <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>La práctica, por dentro</span>
                 <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(32px,4.4vw,56px);line-height:1;letter-spacing:-0.035em;color:#4A0000")}>
@@ -1284,11 +1423,12 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="opiniones" style={s("position:relative;background:#4A0000")}>
-          <div className="op-inner" style={s("display:flex;flex-direction:column;gap:40px;padding:104px 0 112px")}>
+        <section id="opiniones" style={s("background:#FDECEC;padding:var(--sp-lg) 26px")}>
+          <div className="surface-dark" style={s("position:relative;overflow:hidden;max-width:var(--content-wide);margin:0 auto;border-radius:var(--r-xl);background:#4A0000")}>
+          <div className="op-inner" style={s("display:flex;flex-direction:column;gap:30px;padding:52px 0 56px")}>
             <div style={s("max-width:1320px;width:100%;margin:0 auto;padding:0 34px;display:flex;align-items:flex-end;justify-content:space-between;gap:48px;flex-wrap:wrap")}>
               <div style={s("display:flex;flex-direction:column;gap:15px;max-width:600px")}>
-                <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#FF8EBE")}>Opiniones reales</span>
+                <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:var(--fucsia)")}>Opiniones reales</span>
                 <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(32px,4vw,54px);line-height:1.04;letter-spacing:-0.03em;color:#fff")}>Gente parecida a vos</h2>
               </div>
             </div>
@@ -1314,7 +1454,7 @@ export default function YogaLanding() {
                     <div style={s("display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none")}>
                       <span style={s("display:flex;gap:3px")}>
                         {[1, 2, 3, 4, 5].map((n) => (
-                          <svg key={n} width="15" height="15" viewBox="0 0 24 24" fill="#A41D2D" stroke="none">
+                          <svg key={n} width="15" height="15" viewBox="0 0 24 24" fill="var(--butter-ink)" stroke="none">
                             <path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
                           </svg>
                         ))}
@@ -1338,13 +1478,17 @@ export default function YogaLanding() {
               </Hov>
             </div>
           </div>
+          </div>
         </section>
 
-        <section id="acerca" style={s("background:#FFF5F5;padding:104px 34px")}>
-          <div className="g-acerca" style={s("max-width:1320px;margin:0 auto;display:grid;gap:70px;align-items:center;position:relative")}>
-            <div data-reveal="scale" style={s("display:flex;flex-direction:column;gap:22px")}>
-              <div style={s("margin-top:16px;display:flex;flex-direction:column;gap:12px")}>
-                <div style={s("position:relative;width:100%;aspect-ratio:9/16;border-radius:26px;overflow:hidden;background:#2A0007;box-shadow:0 34px 70px -40px rgba(74,0,0,0.6)")}>
+        <section id="acerca" style={s("background:#FFF5F5;padding:var(--sp-md) 34px")}>
+          <div className="g-acerca" style={s("max-width:1320px;margin:0 auto;display:grid;position:relative")}>
+            <div data-reveal="scale" className="about-col" style={s("display:flex;flex-direction:column;gap:22px")}>
+              <div className="about-slot" style={s("margin-top:16px;display:flex;flex-direction:column;gap:12px")}>
+                {/* El alto manda y el ancho se deriva del 9/16. Antes esto era
+                    width:100% + max-height, y esa combinación achataba la caja
+                    hasta volverla horizontal. */}
+                <div className="about-video" style={s("position:relative;aspect-ratio:9/16;height:clamp(480px,72vh,700px);width:auto;max-width:100%;margin:0 auto;border-radius:26px;overflow:hidden;background:#2A0007;box-shadow:0 24px 54px -34px rgba(74,0,0,0.5)")}>
                   <iframe
                     src="https://www.youtube.com/embed/xiD8rFIB9J8?mute=1&loop=1&playlist=xiD8rFIB9J8&modestbranding=1&rel=0"
                     title="Presentación de Lourdes Populin"
@@ -1355,8 +1499,8 @@ export default function YogaLanding() {
                 </div>
               </div>
             </div>
-            <div data-reveal="up" style={s("display:flex;flex-direction:column;gap:26px")}>
-              <div style={s("align-self:flex-start;background:#fff;border-radius:20px;padding:16px 22px 16px 16px;box-shadow:0 30px 60px -26px rgba(74,0,0,0.5);display:flex;align-items:center;gap:13px")}>
+            <div data-reveal="up" style={s("display:flex;flex-direction:column;gap:16px")}>
+              <div style={s("align-self:flex-start;background:#fff;border-radius:20px;padding:11px 18px 11px 12px;box-shadow:0 30px 60px -26px rgba(74,0,0,0.5);display:flex;align-items:center;gap:13px")}>
                 <img src={A("assets/lou-retrato.jpg")} alt="" style={s("width:48px;height:48px;border-radius:99px;object-fit:cover;flex-shrink:0")} />
                 <div style={s("display:flex;flex-direction:column")}>
                   <span style={s("font-size:15px;font-weight:600;color:#A41D2D;white-space:nowrap")}>Lourdes Populin</span>
@@ -1365,16 +1509,16 @@ export default function YogaLanding() {
               </div>
               <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Sobre Lou</span>
               <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(28px,3.4vw,44px);line-height:1.06;letter-spacing:-0.03em;color:#4A0000")}>Sabiduría antigua, para tu bienestar de hoy.</h2>
-              <p style={s("margin:0;font-size:17.5px;line-height:1.62;color:#6B0505;text-wrap:pretty")}>
+              <p style={s("margin:0;font-size:16.5px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
                 Soy Lourdes Populin, profesora de yoga certificada (200 h, Instituto Ananda Yoga, Buenos Aires). En 7 años de práctica e investigación combiné el Hatha Yoga y los <em>Yoga Sūtras de Patañjali</em> con neurociencia aplicada, anatomía, biomecánica, ayurveda y filosofía para armar un modelo de clase propio.
               </p>
-              <p style={s("margin:0;font-size:17.5px;line-height:1.62;color:#6B0505;text-wrap:pretty")}>
+              <p style={s("margin:0;font-size:16.5px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
                 No te voy a pedir que llegues a una postura. Te voy a mostrar qué le pasa a tu cerebro cuando respirás distinto, y cómo usar eso el resto de la semana.
               </p>
 
-              <div style={s("display:flex;flex-direction:column;gap:13px;padding:26px 28px;border-radius:22px;background:#fff;border:1px solid #F3DADA;box-shadow:0 20px 44px -32px rgba(74,0,0,0.45)")}>
+              <div style={s("display:flex;flex-direction:column;gap:9px;padding:16px 20px;border-radius:18px;background:#fff;border:1px solid #F3DADA;box-shadow:0 20px 44px -32px rgba(74,0,0,0.45)")}>
                 <span style={s("font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#A41D2D")}>Formación</span>
-                <div style={s("display:flex;flex-direction:column;gap:11px")}>
+                <div style={s("display:flex;flex-direction:column;gap:7px")}>
                   {CREDENTIALS.map((c) => (
                     <div key={c.strong} style={s("display:flex;gap:12px;align-items:flex-start")}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A41D2D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s("flex-shrink:0;margin-top:3px")}>
@@ -1390,9 +1534,9 @@ export default function YogaLanding() {
                 </div>
               </div>
 
-              <div className="g-benefits" style={s("display:grid;gap:18px")}>
+              <div className="g-benefits" style={s("display:grid;gap:12px")}>
                 {BENEFITS.map((b) => (
-                  <div key={b.t} style={s("background:#fff;border-radius:18px;padding:22px;border:1px solid #F3DADA;display:flex;flex-direction:column;gap:7px")}>
+                  <div key={b.t} style={s("background:#fff;border-radius:14px;padding:14px 16px;border:1px solid #F3DADA;display:flex;flex-direction:column;gap:4px")}>
                     <span style={s("font-size:14.5px;font-weight:600;color:#A41D2D")}>{b.t}</span>
                     <span style={s("font-size:14px;line-height:1.5;color:#6B0505")}>{b.d}</span>
                   </div>
@@ -1402,7 +1546,7 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="clases" style={s("background:#FDECEC;padding:104px 34px")}>
+        <section id="clases" style={s("background:#FDECEC;padding:var(--sp-lg) 34px")}>
           <div style={s("max-width:1320px;margin:0 auto")}>
             <div data-reveal="up" style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:48px;margin-bottom:48px;flex-wrap:wrap")}>
               <div style={s("display:flex;flex-direction:column;gap:16px;max-width:620px")}>
@@ -1460,23 +1604,28 @@ export default function YogaLanding() {
 
         {/* Fondo #FFF8F8: #FDECEC choca con Clases (arriba) y #FFF5F5 con
             Contacto (abajo). Es el tono claro que ya usa el gradiente del hero. */}
-        <section id="meditacion" style={s("background:#FFF8F8;padding:64px 34px")}>
-          <div className="g-medit" style={s("max-width:1180px;margin:0 auto;display:grid;gap:52px;align-items:center")}>
+        <section id="meditacion" style={s("background:#FFF8F8;padding:var(--sp-md) 34px")}>
+          <div className="g-medit" style={s("max-width:1180px;margin:0 auto;display:grid;gap:56px")}>
             <div data-reveal="up" style={s("display:flex;flex-direction:column")}>
-              <span style={s("font-size:11.5px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Meditación</span>
+              {/* Eyebrow puramente tipográfico: sin punto ni cápsula, para que
+                  lea como categoría editorial y no como badge. */}
+              <span className="medit-eyebrow" style={s("font-size:11px;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#A41D2D")}>Meditación</span>
 
-              <h2 style={s("margin:12px 0 0;font-family:'Playfair Display',serif;font-size:clamp(28px,3.1vw,42px);line-height:1.08;letter-spacing:-0.03em;color:#4A0000")}>¿Querés aprender a meditar?</h2>
+              {/* El max-width fuerza un corte de dos líneas deliberado en vez de
+                  dejarlo al azar del ancho de columna. */}
+              <h2 className="medit-title" style={s("margin:10px 0 0;font-family:'Playfair Display',serif;font-size:clamp(29px,2.9vw,40px);line-height:1.05;letter-spacing:-0.032em;color:#4A0000;max-width:11.5em")}>
+                ¿Querés aprender a <span style={s("color:var(--fucsia)")}>meditar</span>?
+              </h2>
 
-              <span style={s("display:block;width:56px;height:1px;background:rgba(164,29,45,0.35);margin:16px 0")} />
-
-              {/* Subtítulo con peso propio, pero en Geist para no competir con
-                  el Playfair del título. */}
-              <p className="medit-sub" style={s("margin:0;font-size:19px;line-height:1.4;color:#4A0000;max-width:28em;font-weight:500;text-wrap:pretty")}>
-                Meditación para mentes curiosas, a las que les gusta entender el porqué y el cómo de las cosas.
+              {/* Puente entre título y cuerpo: peso normal y menor escala para
+                  que no funcione como segundo titular. */}
+              <p className="medit-sub" style={s("margin:18px 0 0;font-size:17px;line-height:1.5;color:#5C2130;max-width:34em;font-weight:400;text-wrap:pretty")}>
+                <span style={s("background:linear-gradient(180deg,rgba(234,217,154,0) 63%,var(--butter-soft) 63%);box-decoration-break:clone;-webkit-box-decoration-break:clone")}>Meditación para mentes curiosas</span>, a las que les gusta entender el porqué y el cómo de las cosas.
               </p>
 
-              {/* max-width en em fija el ancho de lectura (~60 caracteres). */}
-              <div className="medit-body" style={s("display:flex;flex-direction:column;gap:12px;margin-top:18px;max-width:34em")}>
+              {/* 64em de ancho de lectura: líneas más largas significan menos
+                  líneas totales, que es de dónde sale la altura que sobraba. */}
+              <div className="medit-body" style={s("display:flex;flex-direction:column;gap:13px;margin-top:20px;max-width:64ch")}>
                 <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
                   Para algunas personas, meditar tiene más que ver con entrenar la atención. Para otras, con aprender a observar pensamientos, emociones y sensaciones sin juzgarlos ni quedar atrapadas en ellos. Y ninguna de las dos formas está equivocada.
                 </p>
@@ -1487,19 +1636,49 @@ export default function YogaLanding() {
                   Ya sea que quieras entrenar tu atención, mejorar tu concentración, trabajar la memoria, sentir mayor calma o simplemente aprender a relacionarte de otra manera con lo que pasa en tu mente, vamos a construir una práctica que tenga sentido para vos.
                 </p>
               </div>
+
+              <div className="medit-cta" style={s("display:flex;flex-direction:column;align-items:flex-start;gap:11px;margin-top:26px")}>
+                {/* Badge, no botón: no compite con el CTA porque no es clickeable
+                    ni usa el bordó lleno. */}
+                {/* Manteca de fondo + bordó de texto: el momento más claro del
+                    nuevo amarillo. El punto fucsia lo ata al resto de la sección. */}
+                <span className="medit-badge" style={s("display:inline-flex;align-items:center;padding:5px 10px;border-radius:var(--r-sm);background:var(--butter-wash);border:1px solid rgba(210,181,101,0.5);color:#8B1A28;font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;white-space:nowrap")}>
+                  20% OFF
+                </span>
+
+                <Hov
+                  tag="a"
+                  href={IG_MEDIT}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="medit-btn"
+                  css="display:inline-flex;align-items:center;justify-content:center;gap:14px;height:44px;padding:0 22px;border-radius:var(--r-md);background:#7C1526;color:#FFF9F5;font-size:14px;font-weight:500;letter-spacing:0.01em;cursor:pointer;transition:background .24s ease,box-shadow .24s ease"
+                  hover="background:#6A1120;box-shadow:0 4px 14px -8px rgba(74,0,0,0.45)"
+                >
+                  Quiero recibir más información
+                  {/* Flecha manteca: el detalle que evita repetir el amarillo
+                      del badge y a la vez los emparenta. */}
+                  <span className="medit-arrow" style={s("display:inline-flex;color:var(--butter);transition:transform .24s cubic-bezier(.22,.61,.36,1)")}>
+                    <ArrowIcon size={14} />
+                  </span>
+                </Hov>
+              </div>
             </div>
 
             {/* La altura la fija el contenedor y la imagen lo llena. Con
                 aspect-ratio 4/5 la foto medía 800px de alto y era lo que
                 empujaba la sección más allá de una pantalla. */}
-            <div data-reveal="scale" className="medit-media" style={s("position:relative")}>
-              <div className="medit-frame" style={s("position:relative;border-radius:28px;overflow:hidden;background:#E8DFD2;box-shadow:0 44px 90px -50px rgba(74,0,0,0.55)")}>
+            {/* La foto se estira a la altura exacta de la columna de texto:
+                bordes superior e inferior alineados, para que lean como una
+                sola composición y no como una tarjeta al costado. */}
+            <div data-reveal="scale" className="medit-media" style={s("position:relative;display:flex")}>
+              <div className="medit-frame" style={s("position:relative;flex:1;border-radius:var(--r-lg);overflow:hidden;background:#E8DFD2;box-shadow:0 18px 40px -30px rgba(74,0,0,0.4)")}>
                 <img
                   className="medit-img"
-                  src={A("assets/meditacion-lago.png")}
+                  src={A("assets/meditacion-rio.png")}
                   alt="Práctica de yoga junto al río al atardecer"
                   loading="lazy"
-                  style={s("width:100%;height:100%;object-fit:cover;object-position:50% 76%;display:block")}
+                  style={s("width:100%;height:100%;object-fit:cover;object-position:58% 50%;display:block")}
                 />
               </div>
             </div>
@@ -1509,7 +1688,7 @@ export default function YogaLanding() {
               Sin contenido todavía: se define más adelante. */}
         </section>
 
-        <section id="contacto" style={s("position:relative;overflow:hidden;background:#FFF5F5;padding:120px 34px")}>
+        <section id="contacto" style={s("position:relative;overflow:hidden;background:#FFF5F5;padding:var(--sp-lg) 26px")}>
           <div data-reveal="up" style={s("position:relative;max-width:1320px;margin:0 auto;border-radius:38px;overflow:hidden;background:linear-gradient(135deg,#A41D2D 0%,#8B1A28 58%,#6B0505 100%);box-shadow:0 60px 110px -60px rgba(74,0,0,0.95)")}>
             <div style={s("position:absolute;inset:0;background:radial-gradient(ellipse 46% 68% at 22% 12%, rgba(255,255,255,0.2), transparent 65%)")} />
             <div ref={ctaFloatRef} style={s("position:absolute;right:-90px;top:-70px;width:380px;height:380px;border-radius:99px;background:radial-gradient(circle at 38% 34%, rgba(255,214,234,0.42), rgba(255,142,190,0.05) 68%);filter:blur(4px);will-change:transform")} />
@@ -1523,11 +1702,11 @@ export default function YogaLanding() {
                 <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(34px,4.8vw,60px);line-height:0.98;letter-spacing:-0.035em;color:#fff;text-wrap:balance")}>Empezá esta semana</h2>
                 <p style={s("margin:0;font-size:19.5px;line-height:1.55;color:rgba(255,255,255,0.82);max-width:520px")}>Un mensaje y coordinamos. Te propongo día, horario y un plan pensado para tu cuerpo y tu semana real.</p>
                 <div style={s("display:flex;flex-wrap:wrap;gap:13px;padding-top:6px")}>
-                  <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:64px;padding:0 34px;border-radius:99px;background:#fff;color:#A41D2D;font-size:17px;font-weight:700;box-shadow:0 26px 54px -22px rgba(0,0,0,0.75);transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
+                  <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:58px;padding:0 32px;border-radius:99px;background:#FCE7EC;color:#8B1A28;font-size:16.5px;font-weight:700;border:1px solid rgba(164,29,45,0.18);box-shadow:0 10px 26px -14px rgba(0,0,0,0.4);transition:transform .26s cubic-bezier(.22,.61,.36,1),box-shadow .26s,background .26s" hover="transform:translateY(-2px);background:#FBDCE4;box-shadow:0 16px 32px -16px rgba(0,0,0,0.45)">
                     <IgIcon size={19} />
                     Escribime por Instagram
                   </Hov>
-                  <Hov tag="a" href={MAIL_LINK} css="display:inline-flex;align-items:center;gap:11px;height:64px;padding:0 30px;border-radius:99px;background:transparent;border:1.5px solid rgba(255,255,255,0.5);color:#fff;font-size:16.5px;font-weight:600;transition:background .3s,border-color .3s" hover="background:rgba(255,255,255,0.14);border-color:#fff">
+                  <Hov tag="a" href={MAIL_LINK} css="display:inline-flex;align-items:center;gap:11px;height:58px;padding:0 28px;border-radius:99px;background:transparent;border:1.5px solid rgba(255,255,255,0.5);color:#fff;font-size:16.5px;font-weight:600;transition:background .3s,border-color .3s" hover="background:rgba(255,255,255,0.14);border-color:#fff">
                     <MailIcon size={18} />
                     Escribime por email
                   </Hov>
@@ -1538,7 +1717,7 @@ export default function YogaLanding() {
               <div style={s("display:flex;flex-direction:column;gap:14px")}>
                 {CTA_ASSURANCE.map((a) => (
                   <div key={a.n} style={s("display:flex;gap:16px;align-items:flex-start;padding:22px 24px;border-radius:20px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.16);backdrop-filter:blur(8px)")}>
-                    <span style={s("flex-shrink:0;font-family:'Playfair Display',serif;font-size:20px;color:#FFC3DE")}>{a.n}</span>
+                    <span style={s("flex-shrink:0;font-family:'Playfair Display',serif;font-size:20px;color:var(--butter)")}>{a.n}</span>
                     <span style={s("display:flex;flex-direction:column;gap:4px")}>
                       <span style={s("font-size:15.5px;font-weight:600;color:#fff")}>{a.t}</span>
                       <span style={s("font-size:14px;line-height:1.5;color:rgba(255,255,255,0.68)")}>{a.d}</span>
@@ -1550,7 +1729,7 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="faq" style={s("background:#FDECEC;padding:104px 34px 118px")}>
+        <section id="faq" style={s("background:#FDECEC;padding:var(--sp-lg) 34px")}>
           <div className="g-faq" style={s("max-width:1320px;margin:0 auto;display:grid;gap:70px;align-items:start")}>
             <div data-reveal="up" style={s("display:flex;flex-direction:column;gap:18px;position:sticky;top:130px")}>
               <img src={A("assets/lou-retrato.jpg")} alt="Lourdes Populin" style={s("width:68px;height:68px;border-radius:99px;object-fit:cover;box-shadow:0 16px 32px -14px rgba(74,0,0,0.6)")} />
@@ -1564,7 +1743,15 @@ export default function YogaLanding() {
             </div>
             <div data-reveal="up" style={s("display:flex;flex-direction:column;background:#fff;border-radius:28px;border:1px solid #F3DADA;overflow:hidden;box-shadow:0 30px 64px -44px rgba(74,0,0,0.55)")}>
               {FAQS.map((f, n) => (
-                <div key={f.q} style={s("border-bottom:1px solid #F7E6E6")}>
+                <div
+                  key={f.q}
+                  style={{
+                    ...s("border-bottom:1px solid #F7E6E6;transition:background .25s"),
+                    // Abierto: lavado manteca casi imperceptible que marca
+                    // cuál es la pregunta activa.
+                    ...(openFaq === n ? { background: "var(--butter-wash)" } : {}),
+                  }}
+                >
                   <Hov
                     tag="button"
                     onClick={() => setOpenFaq(openFaq === n ? null : n)}
@@ -1572,7 +1759,7 @@ export default function YogaLanding() {
                     hover="color:#A41D2D"
                   >
                     <span>{f.q}</span>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#A41D2D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transition: "transform .35s cubic-bezier(.22,.61,.36,1)", transform: openFaq === n ? "rotate(180deg)" : "rotate(0deg)" }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--fucsia)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transition: "transform .35s cubic-bezier(.22,.61,.36,1)", transform: openFaq === n ? "rotate(180deg)" : "rotate(0deg)" }}>
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </Hov>

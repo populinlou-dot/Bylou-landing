@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 4.3 (students + credits + sign-in fix) — DONE; credit-expiry job (D10) done locally.** Next: Phase 4.4 waitlist (blocked on owner promotion rule), then Phase 5. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 5.1 (demo-studio by config) + 5.2 (Playwright E2E) — DONE locally (uncommitted until orchestrator verification).** Next: Phase 5.3 release (a11y pass, release checklist); Phase 4.4 waitlist still blocked on the owner promotion rule. Phase 4.3 (students + credits + sign-in fix) done; credit-expiry job (D10) done locally. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -25,6 +25,8 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | **Phase 4.2** class types, sessions, weekly series, capacity, cancel (ADR-016) | frontend + backend engineer | `20261014000900_admin_sessions.sql`, `app/admin/{practicas,nueva-clase}`, `booking/admin/**` | done: unit 411/411, pgTAP 306/306, races 7/7, db lint clean; orchestrator browser E2E vs local Supabase: 4-week series created at 09:30 ART, capacity 2→6, cancel → `cancelled`, other occurrences untouched |
 | **Phase 4.3** students search, grant pack, adjust with reason, book/cancel on behalf, sign-in remount fix (ADR-017) | frontend + backend engineer | `20261014001000_admin_students_credits.sql`, `app/admin/{alumnas,alumna}`, `booking/admin/students/**` | done: unit 459/459, pgTAP 396/396, races 9/9, db lint clean; security review 0 blocker/high, M1 (adjust cap vs held debits) fixed; orchestrator browser E2E vs local Supabase at phone width: search, grant 9→13, cancel-for 13→14 refunded with staff actor, ledger sum = balance, email kept when typed right after load |
 | **Credit-expiry job (D10)** + full/booked card fix | backend engineer | `20261014001100_credit_expiry_job.sql`, pgTAP `09`, races "journey D10", `mock-ledger.ts` `expireDueGrants`, `session-meta.tsx` | done locally: `private.expire_credit_grants(p_now)` zeroes unused credits of expired packs with one `expiry` ledger row (system, no note), 5-min grace, idempotent, `skip locked`; pg_cron hourly (`expire-credit-grants`, minute 7) enabled locally; hosted confirmation is an owner step (`SUPABASE_SETUP.md` §4). Unit 531/531, pgTAP 435/435, races 11/11, db lint clean |
+| **Phase 5.1** `demo-studio` by config (PL-01) | qa / frontend engineer | `brands/demo-studio`, `booking/config/copy.ts` (6 `meta.*` keys), `app/_booking/route-copy.ts` (route titles/descriptions from brand copy), `brands/brands.test.ts`, `booking/white-label.test.tsx` | done: zero diff in `booking/domain` + `booking/application`; every copy key non-empty for every registered brand; demo copy has no Bylou names/vocabulary/voseo; agenda, session detail, sign-in, Mis reservas, admin day and roster render under both brands (14 component tests); Bylou titles unchanged; unit 553/553 |
+| **Phase 5.2** Playwright E2E on the static export (ADR-009) | qa / frontend engineer | `@playwright/test` 1.63.0 (exact, pnpm 9 lockfile), `playwright.config.ts`, `playwright.supabase.config.ts`, `tests/e2e/**` | done: 56/56 green (desktop 20, mobile Pixel 7 20, demo-studio build 16) in ~36 s + ~30 s for the two builds; 3 reruns + `--repeat-each=3` (168) with no flakes; opt-in Supabase run (B + F) 2/2 green, then `supabase db reset` |
 
 Phase 0 workstreams:
 
@@ -107,7 +109,7 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 ## Next step
 
 1. **Owner:** follow `docs/booking/SUPABASE_SETUP.md`; send back only the project ref + checklist (never keys).
-2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~, ~~credit-expiry job~~ done. **Phase 4.4** waitlist: needs the owner's promotion rule (proposed: FIFO; auto-promote only with a valid pack and >24 h before start; otherwise skip). Then Phase 5.
+2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~, ~~credit-expiry job~~ done. **Phase 4.4** waitlist: needs the owner's promotion rule (proposed: FIFO; auto-promote only with a valid pack and >24 h before start; otherwise skip). Phase 5.1 and 5.2 done; next **Phase 5.3** release (a11y pass, release checklist, owner approves merge).
 3. **Owner:** after pushing migrations, confirm the `expire-credit-grants` pg_cron job is active (`SUPABASE_SETUP.md` §4, step 4).
 4. Fix UX backlog items above.
 
@@ -129,6 +131,32 @@ npx pnpm@9 run db:stop
 NEXT_PUBLIC_BOOKING_DATA_SOURCE=mock npx pnpm@9 run dev            # http://localhost:3000/reservas/
 NEXT_PUBLIC_BOOKING_DATA_SOURCE=mock NEXT_PUBLIC_BOOKING_BRAND=demo-studio npx pnpm@9 run dev
 npx pnpm@9 test                                                    # unit + component tests
+```
+
+## E2E (Phase 5.2)
+
+Playwright runs against the static export (`out/`), never `next dev`. Only Chromium is used.
+
+```
+npx pnpm@9 exec playwright install chromium   # once per machine
+npx pnpm@9 run test:e2e                       # builds mock exports (bylou + demo-studio), serves them, runs 56 tests
+E2E_SKIP_BUILD=1 npx pnpm@9 run test:e2e      # reuse the cached exports
+npx pnpm@9 exec playwright test --project mobile -g "B ·"   # one project / journey
+```
+
+- Exports are copied to `node_modules/.cache/bylou-e2e/{bylou,demo-studio}` (git-ignored) and served by `tests/e2e/static-server.mjs` (node:http, trailing-slash + 404.html like GitHub Pages) on ports 4310/4311. `out/` is left with the last (bylou, mock) build: run the normal build again before inspecting `out/` for deploy.
+- Reports and traces: `node_modules/.cache/bylou-e2e/{report,test-results}` (`npx pnpm@9 exec playwright show-report node_modules/.cache/bylou-e2e/report`). `.gitignore` was not touched (it has an unrelated pending change).
+- Projects: `desktop` (Desktop Chrome) and `mobile` (Pixel 7) run every Bylou journey; `demo-studio` runs the brand-agnostic journeys tagged `@white-label` plus the identity smoke on the `NEXT_PUBLIC_BOOKING_BRAND=demo-studio` build.
+- The browser clock is pinned to Wed 2026-10-14 09:00 (Buenos Aires) so the mock week, ids and occupancy are deterministic; external requests (fonts, analytics) get an empty 200; any console error or page error (incl. hydration mismatches) fails the test. Labels come from the brand copy, so a copy change updates the selectors.
+- Journeys: A agenda + type/modality filters + week paging; deep link + refresh (200, title, heading) on all 10 booking/admin routes; B OTP sign-in (demo code 123456) + book (double click books once) + Mis reservas; C full / finished / cancelled reasons and no-credit (demo staff account holds no pack) with contact link; D cancel >24 h refunds, <24 h denied with "Escribile a Lou" link; E student on `/admin/` sees "Sin acceso"; F staff publishes a class, opens rosters, marks attendance, grants a pack; G demo-studio theme/wordmark/vocabulary; H landing content intact and no link to `/reservas` or `/admin` (ADR-013).
+- Not in CI: `.github/workflows/main.yml` is unchanged.
+
+Opt-in, local Supabase only (journeys B and F with real OTP codes from Mailpit):
+
+```
+npx pnpm@9 run db:start && supabase db reset
+npx pnpm@9 run test:e2e:supabase   # builds a bylou export against http://127.0.0.1:54321, refuses any non-local API URL
+supabase db reset                  # restore the seed afterwards
 ```
 
 ## How to resume

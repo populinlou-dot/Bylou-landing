@@ -385,6 +385,13 @@ export const UI_COPY_KEYS = [
   "profile.error.too_long",
   "profile.error.invalid_chars",
   "profile.error.save",
+  // Phase 5.1 route metadata (document titles/descriptions in the brand's voice, PL-01)
+  "meta.booking.title",
+  "meta.booking.description",
+  "meta.admin.description",
+  "meta.session",
+  "meta.admin.session",
+  "meta.admin.student",
 ] as const
 
 export type UiCopyKey = (typeof UI_COPY_KEYS)[number]

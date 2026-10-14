@@ -1,15 +1,14 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
-import { resolveBrand } from "@/brands"
+import { routeBrand, routeCopy } from "../_booking/route-copy"
 import { AdminRoot } from "./admin-root"
 
-const brandResolution = resolveBrand(process.env.NEXT_PUBLIC_BOOKING_BRAND)
-const brandName = brandResolution.ok ? brandResolution.brand.name : brandResolution.fallback.name
+const section = routeCopy("admin.label")
 
 /** Staff panel (ADR-003): public static shell, never indexed, not linked from the student UI. */
 export const metadata: Metadata = {
-  title: { default: `Panel · ${brandName}`, template: `%s · Panel · ${brandName}` },
-  description: "Panel del estudio.",
+  title: { default: `${section} · ${routeBrand.name}`, template: `%s · ${section} · ${routeBrand.name}` },
+  description: routeCopy("meta.admin.description"),
   robots: { index: false, follow: false },
 }
 

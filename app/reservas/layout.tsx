@@ -1,15 +1,14 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
-import { resolveBrand } from "@/brands"
+import { routeBrand, routeCopy } from "../_booking/route-copy"
 import { BookingRoot } from "./booking-root"
 
-const brandResolution = resolveBrand(process.env.NEXT_PUBLIC_BOOKING_BRAND)
-const brandName = brandResolution.ok ? brandResolution.brand.name : brandResolution.fallback.name
+const section = routeCopy("meta.booking.title")
 
 /** noindex until release (ADR-003, ADR-013): the landing does not link here yet. */
 export const metadata: Metadata = {
-  title: { default: `Reservas · ${brandName}`, template: `%s · Reservas · ${brandName}` },
-  description: "Agenda de clases y reservas.",
+  title: { default: `${section} · ${routeBrand.name}`, template: `%s · ${section} · ${routeBrand.name}` },
+  description: routeCopy("meta.booking.description"),
   robots: { index: false, follow: false },
 }
 

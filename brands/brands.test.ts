@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { REASON_COPY_KEYS, validateBrandConfig } from "../booking/config"
+import { COPY_KEYS, REASON_COPY_KEYS, TERM_KEYS, validateBrandConfig } from "../booking/config"
 import {
   DOMAIN_REASON_CODES,
   evaluateBooking,
@@ -14,8 +14,10 @@ import { HOUR_MS, MINUTE_MS } from "../booking/domain/time"
 import { themeToCssVars } from "../booking/theme"
 import { bylouBrand } from "./bylou"
 import { demoStudioBrand } from "./demo-studio"
+import { BRANDS } from "."
 
-const brands = [bylouBrand, demoStudioBrand]
+// Every registered brand, so a brand added to the registry is checked without editing this file.
+const brands = Object.values(BRANDS)
 
 interface Scenario {
   name: string
@@ -123,6 +125,19 @@ describe.each(brands)("brand $id", (brand) => {
     }
   })
 
+  it("has a non-empty message for every copy key, and no extra keys", () => {
+    const missing = COPY_KEYS.filter((key) => !(typeof brand.copy[key] === "string" && brand.copy[key].trim() !== ""))
+    expect(missing).toEqual([])
+    expect(Object.keys(brand.copy).sort()).toEqual([...COPY_KEYS].sort())
+  })
+
+  it("has singular and plural for every term", () => {
+    for (const key of TERM_KEYS) {
+      expect(brand.terminology[key].singular.trim(), key).toBeTruthy()
+      expect(brand.terminology[key].plural.trim(), key).toBeTruthy()
+    }
+  })
+
   it("uses the fixed primary CTA verb", () => {
     expect(brand.copy["session.cta"]).toBe("Reservar")
   })
@@ -132,6 +147,31 @@ describe.each(brands)("brand $id", (brand) => {
     for (const name of ["--background", "--foreground", "--primary", "--primary-foreground", "--muted", "--border", "--input", "--ring", "--radius"]) {
       expect(vars[name], name).toBeTruthy()
     }
+  })
+})
+
+describe("demo-studio voice (PL-01)", () => {
+  it("covers both registered brands", () => {
+    expect(Object.keys(BRANDS).sort()).toEqual(["bylou", "demo-studio"])
+  })
+
+  it("never leaks Bylou names or vocabulary into demo-studio copy or terminology", () => {
+    const text = [...Object.values(demoStudioBrand.copy), JSON.stringify(demoStudioBrand.terminology)].join(" ")
+    expect(text).not.toMatch(/\bby ?lou\b|\blou\b|\balumnas?\b|\bprácticas?\b|\bpacks?\b|\bprofes?\b/i)
+  })
+
+  it("speaks a neutral tú register, not Rioplatense voseo", () => {
+    // Unicode-aware word edges: \b treats "á" as a non-word character.
+    const voseo = /(?<!\p{L})(entrá|elegí|podés|tenés|escribile|probá|revisá|buscá|dejalo|registrá)(?!\p{L})/iu
+    expect(Object.values(bylouBrand.copy).join(" ")).toMatch(voseo) // the check can fail
+    expect(Object.values(demoStudioBrand.copy).join(" ")).not.toMatch(voseo)
+  })
+
+  it("translates every message that names the studio's vocabulary differently from Bylou", () => {
+    const same = COPY_KEYS.filter(
+      (key) => demoStudioBrand.copy[key] === bylouBrand.copy[key] && /clase|pack|práctica|alumna/i.test(bylouBrand.copy[key]),
+    )
+    expect(same).toEqual([])
   })
 })
 

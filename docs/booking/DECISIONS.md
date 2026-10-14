@@ -92,3 +92,15 @@ The `domain` purity rule is enforced by an automated test that scans imports (ES
 
 ## ADR-012 — Pre-existing issues are out of scope
 **Accepted.** Lint is broken, there is a possible Geist font variable mismatch, a missing `apple-icon.png`, and landing contrast issues. All are documented in the audit and UX docs, and **not fixed** on this branch unless the owner asks, to keep booking diffs isolated.
+
+## ADR-013 — Explicit data source; no silent mock in production
+**Accepted.** Supersedes the "env presence decides the adapter" idea in `ARCHITECTURE.md`.
+- `NEXT_PUBLIC_BOOKING_DATA_SOURCE` must be `mock` or `supabase`. If it is missing or invalid, the booking pages render a configuration-error state. They never fall back to mock data.
+- `mock` always shows a visible "Datos de demostración" banner.
+- Until Phase 5 release approval, the landing gets **no link** to `/reservas`. Merges to `main` would therefore only add unlinked, `noindex` routes.
+
+## ADR-014 — Studio rules: DB enforces, brand config seeds
+**Accepted.**
+- `studio_settings` in Postgres is the enforcement source for RPCs.
+- `brands/*` rules are defaults for the seed data and the mock adapter, so the UI preview and the DB stay aligned by construction.
+- Late cancellation follows `lateCancelPolicy`. Bylou default: `allow_without_refund`, which needs a `cancel.late` copy key. The confirmation-email copy stays hidden until emails exist (V2).

@@ -359,6 +359,19 @@ describe("MockAdminRepository Phase 4.3 students + credits (mirror the RPCs)", (
     expect(ledgerMismatches(repository)).toEqual([])
   })
 
+  it("mirrors the credit-expiry job: the expired demo pack has one expiry row and Σ ledger = balance", async () => {
+    const { admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    const detail = await getStudentDetail({ admin, repository, clock }, { id: DEMO_USER_ID })
+    expect(detail!.ledger.filter((e) => e.reason === "expiry")).toEqual([
+      expect.objectContaining({ grantId: "demo-grant-0", delta: -2, actor: "system", note: null }),
+    ])
+    expect(detail!.ledger.reduce((sum, e) => sum + e.delta, 0)).toBe(detail!.student.balance)
+    expect(detail!.activeGrants.map((g) => g.id)).toEqual(["demo-grant-1"])
+    const again = await getStudentDetail({ admin, repository, clock }, { id: DEMO_USER_ID })
+    expect(again!.ledger.filter((e) => e.reason === "expiry")).toHaveLength(1)
+    expect(ledgerMismatches(repository)).toEqual([])
+  })
+
   it("never overbooks: a full demo session refuses a staff booking; a pack-less student gets no_valid_credit", async () => {
     const { admin } = await setup(DEMO_STAFF_EMAIL)
     const views = await admin.listSessions({ from: NOW, to: "2026-10-28T03:00:00.000Z" })

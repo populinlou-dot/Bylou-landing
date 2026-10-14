@@ -254,6 +254,28 @@ describe("Past sessions read as past (UX backlog #1)", () => {
   })
 })
 
+describe("A full session the student booked (UX backlog)", () => {
+  it("keeps the 'Completa' badge and shows only the booked state, not 'Esta clase está completa.'", async () => {
+    const items = [
+      availabilityAt("2026-10-15T22:00:00.000Z", { id: "full-mine", capacity: 8, confirmed: 8, myBookingId: "b-full" }),
+    ]
+    renderWith(signedIn(fakeRepository(items)))
+    const card = within(await cardOf(/Ya tenés esta clase reservada/))
+    expect(card.getByText("Completa")).toBeTruthy()
+    expect(card.getByText("Ya tenés esta clase reservada.")).toBeTruthy()
+    expect(card.getByRole("link", { name: "Ver mis reservas" })).toBeTruthy()
+    expect(card.queryByText("Esta clase está completa.")).toBeNull()
+    expect(card.queryByRole("button", { name: "Reservar" })).toBeNull()
+  })
+
+  it("a full session the student did not book still explains it is full", async () => {
+    renderWith(signedIn(fakeRepository([availabilityAt("2026-10-15T22:00:00.000Z", { id: "full", capacity: 8, confirmed: 8 })])))
+    const card = within(await cardOf(/Completa/))
+    expect(card.getByText("Esta clase está completa.")).toBeTruthy()
+    expect(card.queryByText("Ya tenés esta clase reservada.")).toBeNull()
+  })
+})
+
 describe("Spots refresh after booking (UX backlog #2)", () => {
   /** Fake whose `book` changes what the repository returns next, like the backend would. */
   function bookingRepository(items: SessionAvailability[]) {

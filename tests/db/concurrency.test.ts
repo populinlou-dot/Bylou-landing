@@ -280,3 +280,54 @@ describe.sequential("journey AD-08.2 — credit adjustment vs booking", () => {
     }
   })
 })
+
+describe.sequential("journey D10 — credit-expiry job", () => {
+  const expiryRows = async (grantId: string) =>
+    (
+      await admin.one<{ n: number }>(
+        "select count(*)::int as n from public.credit_ledger where grant_id = $1 and reason = 'expiry'",
+        [grantId],
+      )
+    ).n
+
+  it("a pack locked by an in-flight transaction is skipped (never waits), then expired on the next run", async () => {
+    const userId = await admin.createUser()
+    const grant = await admin.expiredGrant(userId, 3)
+    const gate = await Admin.connect()
+    try {
+      await gate.client.query("begin")
+      await gate.client.query(LOCK_GRANT, [grant])
+      await admin.expireCredits() // returns at once: SKIP LOCKED
+      expect(await expiryRows(grant)).toBe(0)
+      await gate.client.query("rollback")
+    } finally {
+      await gate.end()
+    }
+    await admin.expireCredits()
+    expect(await expiryRows(grant)).toBe(1)
+    expect(await admin.invariantViolations([], [userId])).toEqual([])
+  })
+
+  it(`3 job runs in parallel → exactly one expiry row per pack (×${ITERATIONS})`, async () => {
+    // The owner connection + 2 more: earlier journeys keep their actors open until afterAll (pool limit).
+    const runners = [admin, ...(await Promise.all([Admin.connect(), Admin.connect()]))]
+    try {
+      for (let i = 0; i < ITERATIONS; i++) {
+        const userId = await admin.createUser()
+        const grants: string[] = []
+        for (const credits of [1, 2, 3]) grants.push(await admin.expiredGrant(userId, credits)) // one client: sequential
+        await Promise.all(runners.map((r) => r.expireCredits()))
+        for (const grant of grants) expect(await expiryRows(grant)).toBe(1)
+        const { sum, balance } = await admin.one<{ sum: number; balance: number }>(
+          `select (select sum(delta)::int from public.credit_ledger where user_id = $1) as sum,
+                  private.usable_balance($1) as balance`,
+          [userId],
+        )
+        expect(sum).toBe(balance)
+        expect(await admin.invariantViolations([], [userId])).toEqual([])
+      }
+    } finally {
+      await Promise.all(runners.slice(1).map((r) => r.end()))
+    }
+  })
+})

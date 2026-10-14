@@ -157,3 +157,7 @@ begin
   values (c_a1, v_old, v_bk, 'booking_debit', -1, c_a1, now() - interval '7 days');
 end
 $seed$;
+
+-- Credit-expiry job (migration 11): record the expired demo pack in the ledger now instead of waiting
+-- for the hourly pg_cron run, so Σ ledger = balance for every seeded student right after a reset.
+select private.expire_credit_grants();

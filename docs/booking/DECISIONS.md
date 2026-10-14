@@ -133,3 +133,9 @@ The `domain` purity rule is enforced by an automated test that scans imports (ES
 - Grant UI picks a last valid day in studio time and sends `grant_credits` its `p_valid_days` = days until that day + 1. Copy states nothing is charged in the app (ADR-006).
 - Routes: `/admin/alumnas/?q=` (search) and `/admin/alumna/?id=` (detail).
 - `admin_cancel_session` is redefined in the same migration only to store the staff reason alone (or null) as the refund ledger note; the old English prefix ("session cancelled: …") was visible to students. The UI labels the entry from its kind.
+
+## ADR-018 — Credit expiry job
+**Accepted.** `private.expire_credit_grants()` (migration `20261014001100`) zeroes unused credits on expired packs and writes one `expiry` ledger row per pack, so the ledger sum matches the usable balance. pg_cron runs it hourly (minute 7); the migration skips scheduling if pg_cron is missing, and `SUPABASE_SETUP.md` §4 has the owner check for hosted.
+- Cut-off is `least(p_now, now()) - 5 min`, so it never expires a valid pack and an in-flight refund cannot land after the expiry row.
+- Expiry rows have a null note and a null actor (system); the UI labels them by kind. Confirmed bookings on an expired pack stay confirmed; later cancels return no refund.
+- Between expiry and the next run the ledger still counts the unused credits; balances never do.

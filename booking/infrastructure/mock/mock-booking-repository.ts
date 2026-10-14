@@ -42,7 +42,7 @@ import {
 } from "../../application"
 import { DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
 import { createDemoSeed, type DemoSeed } from "./demo-seed"
-import { appendLedger, type MockGrantMeta, type MockLedgerEntry } from "./mock-ledger"
+import { appendLedger, expireDueGrants, type MockGrantMeta, type MockLedgerEntry } from "./mock-ledger"
 
 export interface MockBookingRepositoryOptions {
   clock: Clock
@@ -325,9 +325,13 @@ export class MockBookingRepository implements BookingRepository {
     }
   }
 
-  /** Seeded once per instance from the clock, so ids stay stable while the page is open. */
+  /**
+   * Seeded once per instance from the clock, so ids stay stable while the page is open. Every read first
+   * applies the credit-expiry job (mirrors pg_cron, D10), so Σ ledger = balance at any clock instant.
+   */
   private data(): MockState {
     if (!this.state) this.state = this.createState()
+    expireDueGrants(this.state.grants, this.state.ledger, this.options.clock.now())
     return this.state
   }
 
@@ -361,8 +365,27 @@ export class MockBookingRepository implements BookingRepository {
         createdAt: new Date(toEpochMs(past.startsAt) - 2 * DAY_MS).toISOString(),
       })
     }
+    // An older pack that expired with 2 classes unused: the expiry job (data()) records it, so the staff
+    // ledger of the demo shows a "Vencimiento" row and Σ ledger still equals the balance.
+    const expiredGrant: CreditGrant = {
+      id: "demo-grant-0",
+      userId: DEMO_USER_ID,
+      total: 2,
+      remaining: 2,
+      grantedAt: new Date(now.getTime() - 70 * DAY_MS).toISOString(),
+      expiresAt: new Date(now.getTime() - 40 * DAY_MS).toISOString(),
+    }
     // The demo pack's ledger adds up to its remaining credits (8 granted, 1 used).
     const ledger: MockLedgerEntry[] = []
+    appendLedger(ledger, {
+      userId: DEMO_USER_ID,
+      grantId: expiredGrant.id,
+      reason: "grant",
+      delta: expiredGrant.total,
+      actorId: DEMO_STAFF_ID,
+      note: "Pack 2 · vencido (demo)",
+      createdAt: expiredGrant.grantedAt,
+    })
     appendLedger(ledger, {
       userId: DEMO_USER_ID,
       grantId: grant.id,
@@ -390,7 +413,7 @@ export class MockBookingRepository implements BookingRepository {
     )
     return {
       ...seed,
-      grants: [grant],
+      grants: [expiredGrant, grant],
       keys: new Map(),
       refunded: new Set(),
       classTypeSettings,
@@ -398,6 +421,12 @@ export class MockBookingRepository implements BookingRepository {
       seriesKeys: new Map(),
       ledger,
       grantMeta: {
+        [expiredGrant.id]: {
+          note: "Pack 2 · vencido (demo)",
+          createdAt: expiredGrant.grantedAt,
+          grantedBy: DEMO_STAFF_ID,
+          requestKey: "demo-grant-key-0",
+        },
         [grant.id]: { note: "Pack demo", createdAt: grant.grantedAt, grantedBy: DEMO_STAFF_ID, requestKey: "demo-grant-key" },
       },
       bookingSources: {},

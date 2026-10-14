@@ -142,6 +142,28 @@ export class Admin {
     return id
   }
 
+  /** A pack that expired `expiredHoursAgo` hours ago with all `credits` unused (+ its ledger 'grant' row). */
+  async expiredGrant(userId: string, credits: number, expiredHoursAgo = 1): Promise<string> {
+    const staff = await this.staffId()
+    const { id } = await this.one<{ id: string }>(
+      `with g as (
+         insert into public.credit_grants (user_id, credits_total, credits_remaining, valid_from, expires_at,
+                                           granted_by, idempotency_key)
+         values ($1, $2, $2, now() - interval '40 days', now() - make_interval(hours => $3), $4, gen_random_uuid())
+         returning id)
+       insert into public.credit_ledger (user_id, grant_id, reason, delta, actor_id)
+       select $1, g.id, 'grant', $2, $4 from g returning grant_id as id`,
+      [userId, credits, expiredHoursAgo, staff],
+    )
+    return id
+  }
+
+  /** The credit-expiry job (system only: runs as the owner, like pg_cron). Returns packs expired. */
+  async expireCredits(): Promise<number> {
+    const { n } = await this.one<{ n: number }>("select private.expire_credit_grants() as n")
+    return n
+  }
+
   async session(capacity: number, startsInHours = 72): Promise<string> {
     const { id } = await this.one<{ id: string }>(
       `insert into public.sessions (class_type_id, starts_at, ends_at, capacity, modality)

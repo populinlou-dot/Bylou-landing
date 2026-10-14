@@ -68,9 +68,16 @@ export function outcomeText(outcome: MyOutcome, t: Translate): string {
   }
 }
 
-/** One sentence under the card title: the student's outcome when there is one, else availability. */
+/**
+ * One sentence under the card title: the student's outcome when there is one, else availability.
+ * An upcoming session she already booked shows only the booked state (the action line says it):
+ * "Esta clase está completa." / closed / not open explain why booking is impossible and would
+ * contradict it. Spots left stay (plain information). The state badge ("Completa") is unaffected.
+ */
 export function statusText(entry: AgendaEntry, t: Translate): string | null {
-  return entry.myOutcome ? outcomeText(entry.myOutcome, t) : availabilityText(entry, t)
+  if (entry.myOutcome) return outcomeText(entry.myOutcome, t)
+  if (entry.action === "booked" && entry.state !== "available") return null
+  return availabilityText(entry, t)
 }
 
 export function StateBadge({ state }: { state: SessionState }) {

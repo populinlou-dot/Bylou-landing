@@ -342,7 +342,7 @@ const demoCopy: CopyCatalog = {
   "admin.ledger.reason.grant": "Membresía asignada",
   "admin.ledger.reason.booking_debit": "Reserva",
   "admin.ledger.reason.cancel_refund": "Devolución por cancelación",
-  "admin.ledger.reason.expiry": "Vencimiento",
+  "admin.ledger.reason.expiry": "Vencimiento de la membresía",
   "admin.ledger.reason.admin_adjust": "Ajuste",
   "admin.ledger.actor.staff": "por el estudio",
   "admin.ledger.actor.student": "por la persona",

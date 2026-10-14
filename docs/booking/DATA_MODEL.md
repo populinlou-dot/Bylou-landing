@@ -940,3 +940,13 @@ Where the migrations differ from the sketches above, **the migrations are author
 | 9 | Seed users: `staff@example.test`, `alumna1-3@example.test` | Obviously fake. |
 
 Deferred to Phase 4: waitlist (table, RPCs, D6/D7/D9), credit-expiry job / pg_cron (D10), `admin_update_session` (F4), `admin_update_settings`, `admin_upsert_class_type`, `admin_adjust_credits`.
+
+**Credit-expiry job (D10, migration `20261014001100_credit_expiry_job`, as built).** Differences from the §6.8 sketch:
+
+- Signature `private.expire_credit_grants(p_now timestamptz default now()) returns int` (packs expired). Set-based: one CTE locks due grants `for update skip locked` ordered by id (grants only, §5.1), zeroes `credits_remaining`, writes one `expiry` row each.
+- Cut-off = `least(p_now, now()) − 5 minutes`. `p_now` can only move it earlier, so a still-valid pack is never zeroed. The grace outlasts any RPC transaction that began while the pack was valid and could still refund into it (refunds require `expires_at > now()` at the caller's transaction start).
+- Ledger row: `actor_id = null` (system), `note = null` (the UI labels it by kind: Bylou "Vencimiento del pack"), `delta = −unused`. Credits held by confirmed bookings are already debited and stay; a later cancel on the expired pack refunds nothing (`refunded = false` / `refund_skipped`), so the pack stays at 0.
+- Idempotent: `credits_remaining > 0` + no prior `expiry` row; the unique index `ledger_one_expiry_per_grant` (migration 4) is the backstop. A fully used pack gets no row (`delta <> 0`).
+- Schedule: `pg_cron` hourly at minute 7 (`expire-credit-grants`), created inside a guarded `do` block so the migration never fails if the extension is unavailable (owner step in `SUPABASE_SETUP.md` §4). Local `seed.sql` calls the job once so the seeded expired pack has its row right after a reset.
+- Invariant after a run: per student, Σ ledger delta = `private.usable_balance` (pgTAP `09_credit_expiry`, races "journey D10"). Between expiry and the next run the ledger still counts the unused credits; balances never do (lazy expiry, §8).
+- Mock adapter mirrors it on every read (`expireDueGrants` in `mock-ledger.ts`); the demo student has an expired pack to show the row.

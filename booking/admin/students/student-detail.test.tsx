@@ -47,6 +47,7 @@ function setup() {
         ledgerEntry("1", { delta: 4, note: "Pack 4", createdAt: "2026-10-01T12:00:00.000Z" }),
         ledgerEntry("2", { reason: "admin_adjust", delta: -1, note: "Clase tomada fuera de la app", createdAt: "2026-10-02T12:00:00.000Z" }),
         ledgerEntry("3", { reason: "booking_debit", delta: -1, actor: "student", bookingId: "b-past", createdAt: "2026-10-03T12:00:00.000Z" }),
+        ledgerEntry("4", { grantId: "g-old", reason: "expiry", delta: -2, actor: "system", createdAt: "2026-10-04T12:07:00.000Z" }),
       ],
     },
     sessions: [
@@ -76,12 +77,14 @@ describe("Student detail (AD-09, AD-08.3)", () => {
     expect(within(screen.getByRole("region", { name: "Historial" })).getByText("Presente")).toBeTruthy()
     const ledger = within(screen.getByRole("region", { name: "Movimientos" })).getAllByRole("listitem")
     expect(ledger.map((li) => li.querySelector("p")?.textContent)).toEqual([
+      "Vencimiento del pack · automático",
       "Reserva · por la alumna",
       "Ajuste · por el estudio",
       "Pack cargado · por el estudio",
     ])
-    expect(within(ledger[1]).getByText("resta 1")).toBeTruthy()
-    expect(within(ledger[1]).getByText("Clase tomada fuera de la app")).toBeTruthy()
+    expect(within(ledger[0]).getByText("resta 2")).toBeTruthy()
+    expect(within(ledger[2]).getByText("resta 1")).toBeTruthy()
+    expect(within(ledger[2]).getByText("Clase tomada fuera de la app")).toBeTruthy()
     expect(document.querySelector("script")).toBeNull()
   })
 })

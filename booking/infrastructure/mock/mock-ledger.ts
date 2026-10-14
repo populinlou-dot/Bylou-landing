@@ -3,7 +3,7 @@
  * append-only, one row per change of a pack's remaining credits, so the admin ledger view of the demo
  * adds up exactly like the real one (remaining = Σ delta per pack).
  */
-import type { CreditLedgerReason, IsoDateTime } from "../../domain"
+import type { CreditGrant, CreditLedgerReason, IsoDateTime } from "../../domain"
 
 export interface MockLedgerEntry {
   id: string
@@ -45,4 +45,30 @@ export function appendLedger(
   }
   ledger.push(row)
   return row
+}
+
+/**
+ * Mirror of `private.expire_credit_grants` (DATA_MODEL §6.8): every pack that expired with unused credits
+ * drops to 0 remaining and gets ONE `expiry` row (delta = −unused, system actor, no note), so Σ ledger per
+ * student = usable balance. Bookings already paid by the pack are untouched (their debit is in the ledger).
+ * Idempotent: a pack with an expiry row, or with nothing left, is skipped. Mutates `grants` and `ledger`.
+ * The real job runs hourly with a 5-minute grace; the in-memory demo applies it on every read.
+ */
+export function expireDueGrants(grants: CreditGrant[], ledger: MockLedgerEntry[], now: Date): number {
+  const expired = new Set(ledger.filter((e) => e.reason === "expiry").map((e) => e.grantId))
+  let count = 0
+  for (const grant of [...grants].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    if (grant.remaining <= 0 || expired.has(grant.id) || Date.parse(grant.expiresAt) > now.getTime()) continue
+    appendLedger(ledger, {
+      userId: grant.userId,
+      grantId: grant.id,
+      reason: "expiry",
+      delta: -grant.remaining,
+      actorId: null,
+      createdAt: now.toISOString(),
+    })
+    grant.remaining = 0
+    count += 1
+  }
+  return count
 }

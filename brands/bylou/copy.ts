@@ -288,7 +288,7 @@ export const bylouCopy: CopyCatalog = {
   "admin.ledger.reason.grant": "Pack cargado",
   "admin.ledger.reason.booking_debit": "Reserva",
   "admin.ledger.reason.cancel_refund": "Devolución por cancelación",
-  "admin.ledger.reason.expiry": "Vencimiento",
+  "admin.ledger.reason.expiry": "Vencimiento del pack",
   "admin.ledger.reason.admin_adjust": "Ajuste",
   "admin.ledger.actor.staff": "por el estudio",
   "admin.ledger.actor.student": "por la alumna",

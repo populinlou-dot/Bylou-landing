@@ -190,7 +190,7 @@ Esto crea las tablas, RLS y funciones en la base de producción. Lo ejecutas tú
    supabase db push --dry-run
    ```
 
-   Tienen que aparecer **todas** las migraciones de `supabase/migrations/`, en orden. Cuando se escribió esta guía eran 8, de `20261014000100_baseline_privileges.sql` a `20261014000800_db_hardening.sql`.
+   Tienen que aparecer **todas** las migraciones de `supabase/migrations/`, en orden. Hoy son 11, de `20261014000100_baseline_privileges.sql` a `20261014001100_credit_expiry_job.sql`.
 5. [ ] Aplicar:
 
    ```bash
@@ -225,7 +225,25 @@ Esto crea las tablas, RLS y funciones en la base de producción. Lo ejecutas tú
    select * from public.studio_settings;
    ```
 
-> **pg_cron** (vencimiento automático de créditos) y la lista de espera son de la **Fase 4**. No habilites extensiones ahora: la migración de Fase 4 lo indicará.
+4. [ ] **Vencimiento automático de packs (pg_cron).** La migración `20261014001100_credit_expiry_job.sql` habilita la extensión `pg_cron` y programa la tarea `expire-credit-grants` cada hora (minuto 7). Confirma que quedó activa:
+
+   ```sql
+   select jobname, schedule, command, active from cron.job where jobname = 'expire-credit-grants';
+   ```
+
+   Tiene que devolver **una** fila: `7 * * * *`, `select private.expire_credit_grants()`, `active = true`.
+
+   Si la consulta falla porque no existe `cron.job` (la extensión no se pudo habilitar) o no devuelve filas, la tarea no quedó programada. La migración no falla por eso: los saldos siguen siendo correctos y solo se demora la fila de "Vencimiento del pack" en el historial. En ese caso:
+   1. Si falta la extensión: Dashboard → **Integrations → Cron** (o **Database → Extensions**) → habilita **pg_cron**.
+   2. En el **SQL Editor**, programa la tarea una sola vez:
+
+      ```sql
+      select cron.schedule('expire-credit-grants', '7 * * * *', 'select private.expire_credit_grants()');
+      ```
+
+   3. Repite la consulta de arriba. Después de la primera ejecución puedes ver el resultado en `select * from cron.job_run_details order by start_time desc limit 5;`.
+
+> La lista de espera es de la **Fase 4.4** y llega con su propia migración.
 
 ---
 
@@ -308,7 +326,7 @@ Project ref: <ref>
 [x] 1 Proyecto creado (sa-east-1)
 [x] 2 Auth configurado (OTP 6 dígitos, templates con {{ .Token }}, URLs)
 [x] 3 SMTP propio activo y dominio verificado   (o: pendiente)
-[x] 4 Migraciones aplicadas, RLS verificado
+[x] 4 Migraciones aplicadas, RLS verificado, tarea pg_cron "expire-credit-grants" activa
 [x] 5 Lou promovida a staff
 [x] 6 Variables de GitHub creadas
 [x] 7 .env.local funcionando

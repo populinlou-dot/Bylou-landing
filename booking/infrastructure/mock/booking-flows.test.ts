@@ -11,7 +11,7 @@ import {
 import type { StudioRules } from "../../domain"
 import { DEFAULT_STUDIO_RULES } from "../../config"
 import { DEMO_OTP_CODE, MockAuth } from "./mock-auth"
-import { MockBookingRepository } from "./mock-booking-repository"
+import { MockBookingRepository, type MockThrottle } from "./mock-booking-repository"
 
 // Wednesday 2026-10-14 12:00 Buenos Aires.
 const NOW = "2026-10-14T15:00:00.000Z"
@@ -21,9 +21,9 @@ const DAY = 24 * 60 * 60_000
 const BYLOU_RULES: StudioRules = { ...DEFAULT_STUDIO_RULES, cancellationWindowHours: 24, lateCancelPolicy: "deny" }
 const key = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`
 
-async function setup(rules: StudioRules = BYLOU_RULES, signIn = true) {
+async function setup(rules: StudioRules = BYLOU_RULES, signIn = true, throttle?: MockThrottle) {
   const auth = new MockAuth()
-  const repository = new MockBookingRepository({ clock, rules, currentUserId: () => auth.currentUserId() })
+  const repository = new MockBookingRepository({ clock, rules, currentUserId: () => auth.currentUserId(), throttle })
   if (signIn) {
     expect(await auth.requestCode("alumna@example.test")).toEqual({ ok: true, demoCode: DEMO_OTP_CODE })
     expect((await auth.verifyCode("alumna@example.test", DEMO_OTP_CODE)).ok).toBe(true)
@@ -152,6 +152,38 @@ describe("cancelBooking with the mock adapter (Bylou: 24 h + deny)", () => {
     expect(again).toMatchObject({ ok: true, replayed: true, refunded: true })
     expect((await repository.getMyCreditBalance()).available).toBe(balanceAfterBooking + 1)
     expect((await repository.getSession(farId))?.myBookingId).toBeNull()
+  })
+
+  it("throttles churn like book_session (ADR-019): a 4th booking of one session in 24 h is refused; replays still answer", async () => {
+    const { repository, farId, otherFarId } = await setup()
+    for (let i = 0; i < 3; i++) {
+      const booked = await reserveSession({ repository }, { sessionId: farId, idempotencyKey: key(40 + i) })
+      if (!booked.ok) throw new Error(`booking ${i} failed: ${booked.code}`)
+      expect(await cancelBooking({ repository }, { bookingId: booked.bookingId, idempotencyKey: key(50 + i) })).toMatchObject({ ok: true })
+    }
+    expect(await reserveSession({ repository }, { sessionId: farId, idempotencyKey: key(60) })).toEqual({ ok: false, code: "too_many_changes" })
+    expect(await reserveSession({ repository }, { sessionId: farId, idempotencyKey: key(42) })).toMatchObject({ ok: true, replayed: true })
+    expect(await reserveSession({ repository }, { sessionId: otherFarId, idempotencyKey: key(61) })).toMatchObject({ ok: true })
+  })
+
+  it("throttles after N self-cancellations in 24 h; null limits switch the throttle off", async () => {
+    const limited = await setup(BYLOU_RULES, true, { maxSelfCancellations24h: 2, maxSessionBookings24h: null })
+    for (let i = 0; i < 2; i++) {
+      const booked = await reserveSession({ repository: limited.repository }, { sessionId: limited.farId, idempotencyKey: key(70 + i) })
+      if (!booked.ok) throw new Error("booking failed")
+      await cancelBooking({ repository: limited.repository }, { bookingId: booked.bookingId, idempotencyKey: key(80 + i) })
+    }
+    expect(await reserveSession({ repository: limited.repository }, { sessionId: limited.otherFarId, idempotencyKey: key(72) })).toEqual({
+      ok: false,
+      code: "too_many_changes",
+    })
+
+    const off = await setup(BYLOU_RULES, true, { maxSelfCancellations24h: null, maxSessionBookings24h: null })
+    for (let i = 0; i < 5; i++) {
+      const booked = await reserveSession({ repository: off.repository }, { sessionId: off.farId, idempotencyKey: key(90 + i) })
+      if (!booked.ok) throw new Error(`booking ${i} failed: ${booked.code}`)
+      await cancelBooking({ repository: off.repository }, { bookingId: booked.bookingId, idempotencyKey: key(100 + i) })
+    }
   })
 
   it("denies inside the window without writing, and the account preview hides the button", async () => {

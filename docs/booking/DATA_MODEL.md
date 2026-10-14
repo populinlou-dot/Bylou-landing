@@ -276,7 +276,7 @@ create index waitlist_fifo on public.waitlist_entries (session_id, created_at, i
 | I5 | Never negative credits; never more than granted | `grants_remaining_bounds` CHECK |
 | I6 | `credits_remaining` = Σ ledger `delta` for that grant | All grant writes paired with a ledger insert in the same RPC; reconciliation test |
 | I7 | At most one debit and one refund per booking | `ledger_one_debit_per_booking`, `ledger_one_refund_per_booking` |
-| I8 | Ledger is append-only | No grants + `credit_ledger_append_only` trigger (blocks even the owner, except a deliberate trigger drop) |
+| I8 | Ledger is append-only | No grants + `credit_ledger_append_only` trigger (blocks even the owner, except a deliberate trigger drop). Single exception (migration 12, ADR-020): inside `admin_anonymize_student` a transaction-local flag lets a row change only `note → null` + `note_erased_at`; any other change, DELETE and TRUNCATE stay refused |
 | I9 | Students cannot change role, capacity, or anyone else's data | No write privileges on business tables; column-limited `profiles` update; RLS (§4) |
 | I10 | Bookings and sessions are never hard-deleted | No DELETE privilege; FKs `on delete restrict` |
 
@@ -428,6 +428,7 @@ end $$;
 
 Every transaction acquires row locks in this order and never goes back up the list:
 
+0. **`profiles`** — the one student a call acts for (migration 12): `book_session` / `admin_book_for` / `grant_credits` / `admin_adjust_credits` take it `FOR SHARE`, `admin_anonymize_student` takes it `FOR NO KEY UPDATE`, always first. Both modes are compatible with the `FOR KEY SHARE` that FK checks take, so refunds, grants and ledger inserts never wait on it; only a booking and an erasure of the same student serialize.
 1. **`sessions`** — at most one row per transaction.
 2. **`bookings`** — ordered by `id` when more than one.
 3. **`waitlist_entries`** — ordered by `(created_at, id)`.
@@ -909,7 +910,7 @@ Resolved and removed (numbers kept for references): #1 RPC-only codes → ARCHIT
 | 3 | Credit validity is checked against the **session start**, not the booking time. | Confirm with owner; the alternative is a one-line change in the grant filter. |
 | 4 | Admin-cancelled session whose student's grant already expired: no refund possible. | MVP returns `refunds_skipped`; staff issues a 1-credit grant manually. Alternative: auto compensation grant (adds a setting). |
 | 6 | No notifications (promotion, session cancel). | Phase 4+: DB webhook / Edge Function + SMTP; out of this doc. |
-| 7 | Right to erasure (Ley 25.326) vs. `on delete restrict` history. | Define an anonymization RPC (null name/phone, replace email) before production. |
+| 7 | Right to erasure (Ley 25.326) vs. `on delete restrict` history. | **Done (ADR-020):** `admin_anonymize_student` nulls name/phone/email and pack/ledger notes; history stays pseudonymous; the auth user is banned (it cannot be deleted while history exists, `SUPABASE_SETUP.md` §10). Open: the auth record keeps the email (owner decision). |
 | 8 | Single tenant per Supabase project. | Multi-tenant later requires `studio_id` on every table and policy rewrite; documented, not built. |
 | 9 | `signInWithOtp` auto-creates users; OTP endpoint abuse. | New users are harmless `student` rows; enable Supabase CAPTCHA / rate limits at provisioning (owner). |
 | 10 | `confirmed_count` is denormalized. | Only RPCs write it under the session lock; CHECK + reconciliation test D8; staff can run a recount query. |
@@ -950,3 +951,8 @@ Deferred to Phase 4: waitlist (table, RPCs, D6/D7/D9), credit-expiry job / pg_cr
 - Schedule: `pg_cron` hourly at minute 7 (`expire-credit-grants`), created inside a guarded `do` block so the migration never fails if the extension is unavailable (owner step in `SUPABASE_SETUP.md` §4). Local `seed.sql` calls the job once so the seeded expired pack has its row right after a reset.
 - Invariant after a run: per student, Σ ledger delta = `private.usable_balance` (pgTAP `09_credit_expiry`, races "journey D10"). Between expiry and the next run the ledger still counts the unused credits; balances never do (lazy expiry, §8).
 - Mock adapter mirrors it on every read (`expireDueGrants` in `mock-ledger.ts`); the demo student has an expired pack to show the row.
+
+**Throttle and erasure (migration `20261014001200_throttle_and_erasure`, ADR-019 / ADR-020, as built).**
+
+- `studio_settings.max_self_cancellations_24h` (default 6) and `max_session_bookings_24h` (default 3), null = off, 1–100, not readable through the Data API. `book_session` returns `too_many_changes` (`limit`: `cancellations` | `session_rebookings`) after `session_full` and before `no_valid_credit`. It counts booking rows (`cancelled_by = caller` within 24 h; `created_by = caller` on this session within 24 h), never keys. Indexes `bookings_user_cancelled_idx (user_id, cancelled_at) where cancelled_at is not null` and `bookings_user_session_idx (user_id, session_id, created_at)`. Replays return before any check; staff RPCs are not throttled and staff cancellations do not count.
+- `profiles.anonymized_at` + `anonymized_by` (staff, FK to profiles) + CHECKs `profiles_anonymized_scrubbed` (no email/name/phone once set) and `profiles_anonymized_by_consistent`; `credit_ledger.note_erased_at` (+ `ledger_adjust_note` now accepts an erased note). `admin_anonymize_student(p_user_id, p_confirm_email)`: staff only; confirmation = current email (case-insensitive) or, without one, exact display name / user id; `not_found` (unknown/non-student), `email_mismatch`, `has_upcoming_bookings` (`upcoming`); replay → `replayed: true`. An anonymized caller of `book_session` gets 42501; `admin_book_for`, `grant_credits` and `admin_adjust_credits` answer `not_found` (redefined here with the level-0 profile lock); `admin_search_students` skips her; `profiles_update_own` and `sync_user_email` ignore her row.

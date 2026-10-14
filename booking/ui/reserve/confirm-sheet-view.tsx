@@ -46,6 +46,8 @@ export function bookFailureMessage(code: BookCode, t: Translate): string {
     case "booking_closed":
     case "already_booked":
       return t(`reason.${code}`)
+    case "too_many_changes":
+      return t("sheet.tooManyChanges")
     case "not_found":
       return t("error.notFound")
     case "forbidden":
@@ -139,6 +141,7 @@ export function ConfirmSheetView(props: ConfirmSheetViewProps) {
                   {t("success.mine")}
                 </Link>
               ) : null}
+              {failed === "too_many_changes" ? <ContactLink /> : null}
             </div>
           ) : null}
 

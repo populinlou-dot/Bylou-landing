@@ -80,3 +80,57 @@ test.describe("F · staff runs the day", () => {
     await expect(page.getByRole("heading", { level: 2, name: t("admin.student.balance.many", { n: 4 }) })).toBeVisible()
   })
 })
+
+test.describe("I · account erasure (ADR-020)", () => {
+  test("staff cancels her upcoming bookings, then erases her personal data behind the typed email", { tag: "@white-label" }, async ({ page, t }) => {
+    await page.goto("/admin/")
+    await page.getByRole("main").getByRole("link", { name: t("auth.signIn") }).click()
+    await signIn(page, t, STAFF_EMAIL)
+    await page.getByRole("link", { name: t("admin.nav.students") }).click()
+    // The demo student without a name is listed (and confirmed) by her email.
+    const email = "alumna4@demo.test"
+    await page.getByRole("main").getByRole("link", { name: new RegExp(`^${email.replace(/\./g, "\\.")}`) }).click()
+    await expect(page.getByRole("heading", { level: 1, name: email })).toBeVisible()
+
+    // With an upcoming booking the erasure is refused.
+    await page.getByRole("button", { name: t("admin.erase.cta") }).click()
+    let sheet = page.getByRole("dialog", { name: t("admin.erase.title", { name: email }) })
+    await sheet.getByRole("textbox", { name: t("admin.erase.email") }).fill("otra@demo.test")
+    await sheet.getByRole("button", { name: t("admin.erase.confirm") }).click()
+    await expect(sheet.getByText(t("admin.erase.mismatch"))).toBeVisible()
+    await sheet.getByRole("textbox", { name: t("admin.erase.email") }).fill(email.toUpperCase())
+    await sheet.getByRole("button", { name: t("admin.erase.confirm") }).click()
+    await expect(sheet.getByRole("alert")).toHaveText(t("admin.erase.upcoming"))
+    await sheet.getByRole("button", { name: t("admin.erase.keep") }).click()
+
+    // Cancel every upcoming booking on her behalf.
+    const upcoming = page.getByRole("region", { name: t("admin.student.upcoming") })
+    const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const cancelLabel = new RegExp(`^${escape(t("admin.cancelFor.ctaLabel", { date: "" }).trim())}`)
+    const cancelButtons = upcoming.getByRole("button", { name: cancelLabel })
+    await expect(cancelButtons.first()).toBeVisible()
+    while ((await cancelButtons.count()) > 0) {
+      const before = await cancelButtons.count()
+      await cancelButtons.first().click()
+      await page.getByRole("dialog", { name: t("admin.cancelFor.title") }).getByRole("button", { name: t("admin.cancelFor.confirm") }).click()
+      await expect(cancelButtons).toHaveCount(before - 1)
+    }
+    await expect(upcoming.getByText(t("admin.student.noUpcoming"))).toBeVisible()
+
+    await page.getByRole("button", { name: t("admin.erase.cta") }).click()
+    sheet = page.getByRole("dialog", { name: t("admin.erase.title", { name: email }) })
+    await sheet.getByRole("textbox", { name: t("admin.erase.email") }).fill(email)
+    await sheet.getByRole("button", { name: t("admin.erase.confirm") }).click()
+
+    await expect(page.getByRole("status").filter({ hasText: t("admin.erase.done") })).toBeVisible()
+    await expect(page.getByRole("heading", { level: 1, name: t("admin.erase.anonymousName") })).toBeVisible()
+    await expect(page.getByText(email)).toHaveCount(0)
+    await expect(page.getByRole("button", { name: t("admin.erase.cta") })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: t("admin.grant.cta") })).toHaveCount(0)
+    // History stays (pseudonymous).
+    await expect(page.getByRole("region", { name: t("admin.student.history") }).getByRole("listitem").first()).toBeVisible()
+
+    await page.getByRole("link", { name: t("admin.student.back") }).click()
+    await expect(page.getByRole("main").getByRole("link", { name: new RegExp(`^${email.replace(/\./g, "\\.")}`) })).toHaveCount(0)
+  })
+})

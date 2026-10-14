@@ -16,6 +16,7 @@ import {
   toEpochMs,
   type Booking,
   type CreditGrant,
+  type IsoDateTime,
   type Modality,
   type StudioRules,
 } from "../../domain"
@@ -52,7 +53,18 @@ export interface MockBookingRepositoryOptions {
   latencyMs?: number
   /** Who is signed in (MockAuth). Without it every write is `unauthenticated`. */
   currentUserId?: () => string | null
+  /** Churn throttle (ADR-019); defaults mirror `studio_settings`. */
+  throttle?: MockThrottle
 }
+
+/** Rolling 24 h limits of book_session (null = off). */
+export interface MockThrottle {
+  maxSelfCancellations24h: number | null
+  maxSessionBookings24h: number | null
+}
+
+/** Same defaults as the migration (studio_settings.max_self_cancellations_24h / max_session_bookings_24h). */
+export const MOCK_THROTTLE_DEFAULTS: MockThrottle = { maxSelfCancellations24h: 6, maxSessionBookings24h: 3 }
 
 const DAY_MS = 24 * 60 * 60_000
 /** Fictional attendee details, shown only to the demo student holding a booking. */
@@ -87,6 +99,10 @@ interface MockState extends DemoSeed {
   bookingSources: Record<string, BookingSource>
   /** profiles.display_name by user id (absent = not set yet). */
   displayNames: Record<string, string>
+  /** profiles.anonymized_at by user id (ADR-020; absent = not anonymized). */
+  anonymizedAt: Record<string, IsoDateTime>
+  /** Instants of cancellations a student made herself (bookings.cancelled_by = user), for the throttle. */
+  selfCancellations: { userId: string; at: IsoDateTime }[]
 }
 
 /** The live in-memory studio shared with MockAdminRepository (mock only). */
@@ -106,6 +122,7 @@ export type MockStudio = Pick<
   | "grantMeta"
   | "bookingSources"
   | "displayNames"
+  | "anonymizedAt"
 > & { rules: StudioRules }
 
 /** Demo defaults for the seeded class types (all published). */
@@ -199,6 +216,8 @@ export class MockBookingRepository implements BookingRepository {
       if (!prior || prior.sessionId !== cmd.sessionId) return { ok: false, code: "invalid_input" }
       return { ok: true, bookingId: prior.id, replayed: true, remainingCredits: this.balanceOf(userId).available }
     }
+    // An anonymized profile cannot book (book_session raises 42501).
+    if (state.anonymizedAt[userId]) return { ok: false, code: "forbidden" }
 
     const session = state.sessions.find((s) => s.id === cmd.sessionId)
     // Sessions of an archived class type are not bookable (book_session → not_found).
@@ -211,6 +230,10 @@ export class MockBookingRepository implements BookingRepository {
       rules: this.options.rules,
       now: this.options.clock.now(),
     })
+    // Same order as book_session: the throttle runs after every rule except the credit check.
+    if ((decision.ok || decision.code === "no_valid_credit") && this.isThrottled(userId, session.id)) {
+      return { ok: false, code: "too_many_changes" }
+    }
     if (!decision.ok) return { ok: false, code: decision.code }
 
     const grant = state.grants.find((g) => g.id === decision.grantId)
@@ -261,6 +284,7 @@ export class MockBookingRepository implements BookingRepository {
     if (decision.outcome === "late" && !cmd.acceptLate) return { ok: false, code: decision.code }
 
     booking.status = decision.outcome === "refund" ? "cancelled" : "late_cancelled"
+    state.selfCancellations.push({ userId, at: now.toISOString() })
     let refunded = false
     if (decision.outcome === "refund") {
       const grant = state.grants.find((g) => g.id === booking.creditGrantId)
@@ -321,6 +345,7 @@ export class MockBookingRepository implements BookingRepository {
       grantMeta: state.grantMeta,
       bookingSources: state.bookingSources,
       displayNames: state.displayNames,
+      anonymizedAt: state.anonymizedAt,
       rules: this.options.rules,
     }
   }
@@ -432,7 +457,28 @@ export class MockBookingRepository implements BookingRepository {
       bookingSources: {},
       // The demo identities already have names, matching the /admin/ demo roster.
       displayNames: { [DEMO_USER_ID]: "Alumna demo", [DEMO_STAFF_ID]: "Lou (demo)" },
+      anonymizedAt: {},
+      selfCancellations: [],
     }
+  }
+
+  /** Mirrors book_session step (e): rows in the last 24 h, never idempotency keys; staff actions do not count. */
+  private isThrottled(userId: string, sessionId: string): boolean {
+    const limits = this.options.throttle ?? MOCK_THROTTLE_DEFAULTS
+    const state = this.data()
+    const since = this.options.clock.now().getTime() - DAY_MS
+    const recent = (iso: IsoDateTime) => toEpochMs(iso) > since
+    if (limits.maxSelfCancellations24h !== null) {
+      const cancellations = state.selfCancellations.filter((c) => c.userId === userId && recent(c.at)).length
+      if (cancellations >= limits.maxSelfCancellations24h) return true
+    }
+    if (limits.maxSessionBookings24h !== null) {
+      const rebookings = state.bookings.filter(
+        (b) => b.userId === userId && b.sessionId === sessionId && recent(b.createdAt) && (state.bookingSources[b.id] ?? "student") !== "staff",
+      ).length
+      if (rebookings >= limits.maxSessionBookings24h) return true
+    }
+    return false
   }
 
   private balanceOf(userId: string): CreditBalance {

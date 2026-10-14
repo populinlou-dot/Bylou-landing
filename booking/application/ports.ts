@@ -94,8 +94,13 @@ export interface CreditBalance {
 export const TRANSPORT_CODES = ["unauthenticated", "forbidden", "invalid_input", "network_error", "unknown"] as const
 export type TransportCode = (typeof TRANSPORT_CODES)[number]
 
-/** `not_found` is an application/RPC code (unknown or invisible id). */
-export type BookCode = BookingRejectionCode | "not_found" | TransportCode
+/**
+ * Application/RPC-only codes of `book_session` (not domain rules): `not_found` (unknown or invisible id) and
+ * `too_many_changes` (churn throttle, ADR-019: too many self-cancellations, or re-bookings of the same
+ * session, in the last 24 h).
+ */
+export const BOOK_RPC_CODES = ["not_found", "too_many_changes"] as const
+export type BookCode = BookingRejectionCode | (typeof BOOK_RPC_CODES)[number] | TransportCode
 export type CancelCode = CancellationCode | "not_found" | "not_owner" | TransportCode
 
 export interface BookCommand {
@@ -336,6 +341,8 @@ export interface StudentSummary {
   /** Earliest expiry among packs that still have classes; null when none. */
   nextExpiry: IsoDateTime | null
   nextBooking: StudentNextBooking | null
+  /** Set once her personal data was erased (ADR-020): name, phone and email are null from then on. */
+  anonymizedAt: IsoDateTime | null
 }
 
 /** One pack (credit grant) as staff see it. `note` is visible to the student too. */
@@ -455,6 +462,21 @@ export type CancelForStudentResult =
     }
   | { ok: false; code: CancelForStudentCode }
 
+/** `admin_anonymize_student` (ADR-020): erase a student's personal data, keeping her history. */
+export interface AnonymizeStudentCommand {
+  userId: string
+  /** Typo guard: must equal her current email (case-insensitive); the server re-checks. */
+  confirmEmail: string
+}
+
+/** Business refusals of `admin_anonymize_student` (application/RPC codes). */
+export const ANONYMIZE_STUDENT_CODES = ["email_mismatch", "has_upcoming_bookings", "not_found"] as const
+export type AnonymizeStudentCode = (typeof ANONYMIZE_STUDENT_CODES)[number] | TransportCode
+
+export type AnonymizeStudentResult =
+  | { ok: true; userId: string; anonymizedAt: IsoDateTime; replayed: boolean }
+  | { ok: false; code: AnonymizeStudentCode; upcoming?: number }
+
 /**
  * Staff read/write side. Reads throw RepositoryError (`unauthenticated`, `forbidden`, …);
  * writes return business refusals as data. The database is the only authority (ADR-005).
@@ -489,4 +511,6 @@ export interface AdminRepository {
   adjustCredits(cmd: AdjustCreditsCommand): Promise<AdjustCreditsResult>
   bookForStudent(cmd: BookForStudentCommand): Promise<BookForStudentResult>
   cancelForStudent(cmd: CancelForStudentCommand): Promise<CancelForStudentResult>
+  /** Idempotent: an already anonymized student → ok with `replayed: true`. */
+  anonymizeStudent(cmd: AnonymizeStudentCommand): Promise<AnonymizeStudentResult>
 }

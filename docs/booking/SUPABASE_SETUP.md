@@ -19,6 +19,7 @@ Contexto: ADR-002 (Supabase), ADR-004 (login con código OTP de 6 dígitos), ADR
 | 7 | [`.env.local` para desarrollo](#7-local-envlocal) | Tu máquina | 5 min |
 | 8 | [Avisar al orquestador](#8-what-to-send-back) | Chat | 1 min |
 | 9 | [Rollback y costos](#9-rollback-and-cost-notes) | Lectura | — |
+| 10 | [Borrar los datos de una alumna](#10-account-erasure-anonymize-then-ban) | Panel `/admin/` + SQL Editor | 5 min (cuando alguien lo pida) |
 
 ---
 
@@ -190,7 +191,7 @@ Esto crea las tablas, RLS y funciones en la base de producción. Lo ejecutas tú
    supabase db push --dry-run
    ```
 
-   Tienen que aparecer **todas** las migraciones de `supabase/migrations/`, en orden. Hoy son 11, de `20261014000100_baseline_privileges.sql` a `20261014001100_credit_expiry_job.sql`.
+   Tienen que aparecer **todas** las migraciones de `supabase/migrations/`, en orden. Hoy son 12, de `20261014000100_baseline_privileges.sql` a `20261014001200_throttle_and_erasure.sql`.
 5. [ ] Aplicar:
 
    ```bash
@@ -361,6 +362,41 @@ Project ref: <ref>
 
 - **GitHub:** borrar las 3 variables no cambia nada hoy, porque el workflow no las usa.
 - **SMTP/DNS:** desactivar *custom SMTP* en Supabase devuelve el envío al email incorporado (limitado). Los registros DNS del subdominio de envío se pueden borrar sin afectar el sitio.
+
+---
+
+## 10. Account erasure (anonymize, then ban)
+
+Cuando una alumna pide que borren sus datos (derecho de supresión, Ley 25.326). Contexto: ADR-020.
+
+**Qué se puede y qué no:** su historial (reservas, packs y movimientos) se conserva para que los saldos y los cupos sigan cerrando, pero queda **sin datos personales**. El usuario de Auth **no se puede borrar** mientras tenga historial: `profiles.id` borra en cascada desde `auth.users`, y las reservas, los packs y el ledger apuntan al perfil con `ON DELETE RESTRICT`. Por eso el dashboard responde con un error si intentas **Delete user** (verificado localmente: `violates foreign key constraint ... on table "credit_grants"`). En su lugar, **se bloquea** (*ban*).
+
+1. [ ] **Panel `/admin/`** → Alumnas → su ficha. Si tiene reservas próximas, cancélalas primero (**Cancelar reserva**).
+2. [ ] En la misma ficha → **Datos personales** → **Borrar datos de la alumna**. Escribe su email (tiene que coincidir con el de la ficha) y confirma. Si no tiene email confirmado, la hoja te pide su nombre tal cual o su código (el `id`).
+   - Se borran su nombre, email y teléfono del perfil y las notas de sus packs y movimientos. Queda la marca `anonymized_at`.
+   - Desde ese momento no puede reservar, no se le pueden cargar packs ni ajustes, no aparece en la búsqueda y su ficha queda de solo lectura. Queda registrado quién hizo el borrado (`anonymized_by`).
+   - Repetirlo no hace nada (es idempotente).
+3. [ ] Copia el `id` de la alumna (está en la URL de la ficha: `/admin/alumna/?id=<id>`).
+4. [ ] **SQL Editor** → reemplaza el id y ejecuta:
+
+   ```sql
+   -- Block sign-in for an anonymized student. Only touches a profile that was already anonymized.
+   update auth.users u
+      set banned_until = now() + interval '100 years'
+     from public.profiles p
+    where p.id = u.id
+      and p.id = 'ID_DE_LA_ALUMNA_AQUI'
+      and p.anonymized_at is not null
+   returning u.id, u.banned_until;
+   ```
+
+5. [ ] Tiene que devolver **exactamente 1 fila**.
+   - **0 filas:** el id no es correcto o el paso 2 no terminó. No sigas hasta que el paso 2 diga "Datos borrados".
+6. [ ] Listo. Con el bloqueo, Auth rechaza su código (`user_banned`) y la renovación de su sesión. Si en algún momento volviera a escribir su email, el perfil no lo recupera: un perfil anonimizado nunca vuelve a copiar el email desde Auth.
+
+> **Lo que queda en Auth:** el registro de `auth.users` conserva su email (lo usa Supabase para el bloqueo). Si la alumna pide que tampoco quede ahí, hay que decidir entre: (a) reemplazar ese email desde la API de administración de Supabase (requiere la secret key, fuera de la app), o (b) un cambio de esquema para poder borrar el usuario de Auth sin borrar el historial. Ninguna de las dos está hecha: avísale al orquestador.
+>
+> **Una alumna sin historial** (nunca tuvo packs ni reservas) sí se puede borrar directamente: **Authentication → Users → ⋯ → Delete user**. Su perfil se borra en cascada.
 
 ---
 

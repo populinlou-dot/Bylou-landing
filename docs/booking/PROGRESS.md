@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 5.1 (demo-studio by config) + 5.2 (Playwright E2E) — DONE locally (uncommitted until orchestrator verification).** Next: Phase 5.3 release (a11y pass, release checklist); Phase 4.4 waitlist still blocked on the owner promotion rule. Phase 4.3 (students + credits + sign-in fix) done; credit-expiry job (D10) done locally. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Pre-release hardening (churn throttle ADR-019, account erasure ADR-020, a11y pass) — DONE locally (uncommitted until orchestrator verification).** Phase 5.1 (demo-studio by config) + 5.2 (Playwright E2E) done. Next: rest of Phase 5.3 release checklist (CAPTCHA, owner items); Phase 4.4 waitlist still blocked on the owner promotion rule. Phase 4.3 (students + credits + sign-in fix) done; credit-expiry job (D10) done locally. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -26,6 +26,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | **Phase 4.3** students search, grant pack, adjust with reason, book/cancel on behalf, sign-in remount fix (ADR-017) | frontend + backend engineer | `20261014001000_admin_students_credits.sql`, `app/admin/{alumnas,alumna}`, `booking/admin/students/**` | done: unit 459/459, pgTAP 396/396, races 9/9, db lint clean; security review 0 blocker/high, M1 (adjust cap vs held debits) fixed; orchestrator browser E2E vs local Supabase at phone width: search, grant 9→13, cancel-for 13→14 refunded with staff actor, ledger sum = balance, email kept when typed right after load |
 | **Credit-expiry job (D10)** + full/booked card fix | backend engineer | `20261014001100_credit_expiry_job.sql`, pgTAP `09`, races "journey D10", `mock-ledger.ts` `expireDueGrants`, `session-meta.tsx` | done locally: `private.expire_credit_grants(p_now)` zeroes unused credits of expired packs with one `expiry` ledger row (system, no note), 5-min grace, idempotent, `skip locked`; pg_cron hourly (`expire-credit-grants`, minute 7) enabled locally; hosted confirmation is an owner step (`SUPABASE_SETUP.md` §4). Unit 531/531, pgTAP 435/435, races 11/11, db lint clean |
 | **Phase 5.1** `demo-studio` by config (PL-01) | qa / frontend engineer | `brands/demo-studio`, `booking/config/copy.ts` (6 `meta.*` keys), `app/_booking/route-copy.ts` (route titles/descriptions from brand copy), `brands/brands.test.ts`, `booking/white-label.test.tsx` | done: zero diff in `booking/domain` + `booking/application`; every copy key non-empty for every registered brand; demo copy has no Bylou names/vocabulary/voseo; agenda, session detail, sign-in, Mis reservas, admin day and roster render under both brands (14 component tests); Bylou titles unchanged; unit 553/553 |
+| **Pre-release hardening** churn throttle (ADR-019), account erasure (ADR-020), a11y pass (UX_DESIGN §5.2) | backend + frontend + qa | `20261014001200_throttle_and_erasure.sql`, pgTAP `10`, race "journey ADR-020", `booking/admin/students/erase-sheet.tsx`, `tests/e2e/a11y.spec.ts`, `brands/contrast.test.ts`, `@axe-core/playwright` 4.13.0 (exact, dev) | done (+ security-review fixes: no-email confirmation by name/id, grant/adjust refuse erased students with the profile lock, `anonymized_by` audit, owner-ban note in the sheet): unit 570/570, pgTAP 520/520, races 13/13, db lint clean, E2E 65/65 (desktop 23, mobile 23, demo-studio 19; new tests ×3 repeats, no flakes), opt-in Supabase E2E 2/2, `pnpm install --frozen-lockfile` ok, no secrets in `out/`. See "Accessibility pass" below |
 | **Phase 5.2** Playwright E2E on the static export (ADR-009) | qa / frontend engineer | `@playwright/test` 1.63.0 (exact, pnpm 9 lockfile), `playwright.config.ts`, `playwright.supabase.config.ts`, `tests/e2e/**` | done: 56/56 green (desktop 20, mobile Pixel 7 20, demo-studio build 16) in ~36 s + ~30 s for the two builds; 3 reruns + `--repeat-each=3` (168) with no flakes; opt-in Supabase run (B + F) 2/2 green, then `supabase db reset` |
 
 Phase 0 workstreams:
@@ -87,14 +88,34 @@ Carried over from a previous local setup session; intentionally left uncommitted
 ## Pre-release checklist (from security review, not yet done)
 
 - [ ] CAPTCHA (Turnstile) on sign-in: needs site key + frontend change.
-- [ ] Throttle book/cancel churn (review LOW #3): RPC-level rate limit or per-user daily cap.
-- [ ] Account erasure: anonymize procedure (FKs are `ON DELETE RESTRICT`).
+- [x] Throttle book/cancel churn (review LOW #3): `book_session` → `too_many_changes` after 6 self-cancellations or 3 bookings of the same session in 24 h (`studio_settings`, null = off; ADR-019).
+- [x] Account erasure: `admin_anonymize_student` + "Borrar datos de la alumna" in the student detail; owner bans the auth user (`SUPABASE_SETUP.md` §10; ADR-020). **Owner decision pending:** the auth record keeps the email (Admin API or schema change to remove it).
 - [ ] Admin UI must escape `display_name`; never put staff-only comments in credit notes (students can read their own notes).
 - [ ] Never run `supabase/seed.sql` against a hosted project.
 - [ ] Review lows (4.3): `admin_cancel_for` can refund after the session ended when attendance is unknown (documented AD-10 override; consider a reason or a time guard); no ledger audit row when a refund is skipped or `p_refund=false`; concurrent class types with the same name → raw 23505; `admin_book_for` allowed on unpublished sessions (documented).
 - [ ] Adjust cap counts attended bookings as held, so a fully used pack cannot get a "+" adjustment (grant a new pack instead). Tell Lou.
 - [ ] `npx pnpm@9 run test:db` leaves `race-*` users in the local DB; run `supabase db reset` afterwards.
 - [ ] `.env.example`: writing `.env*` files is blocked by the current permission settings. Owner to allow or create it (content: `NEXT_PUBLIC_BOOKING_DATA_SOURCE`, `NEXT_PUBLIC_BOOKING_BRAND`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BASE_PATH`, all empty, public values only).
+
+## Accessibility pass (pre-release, UX_DESIGN §5.2)
+
+Automated in `tests/e2e/a11y.spec.ts` (desktop, mobile Pixel 7, demo-studio build): axe-core 4.13 with WCAG 2.0/2.1/2.2 A+AA + best-practice rules on agenda, session detail, sign-in (email + code), confirm sheet + success, Mis reservas, cancel sheet, admin guard, day, roster, class types, new class, students, student detail, grant sheet and erase sheet (with a field error). Serious/critical fail the test; the same run asserts `lang`, 44×44 px targets, no duplicated live-region text, focus trapped in an open sheet and returned to its trigger on Escape. Token contrast for every registered brand: `brands/contrast.test.ts`.
+
+Fixed:
+- `lang`: the booking wrapper (`[data-booking-theme]`) now carries the brand locale (`es-AR` for Bylou, `es` for demo-studio); sheets inherit it (portalled inside). `app/layout.tsx` (`<html lang="es">`) untouched.
+- Landmarks (axe `region`, moderate): the demo banner sat outside every landmark; it now renders inside the `<header>` banner landmark (student and admin shells).
+- Touch targets: agenda card title links were 28 px tall → 44 px hit area (`-my-2 min-h-11`, same visual rhythm); admin "Hoy" nav link 43 px wide → `min-w-11` (also on the student nav).
+- Erase sheet: a field error moves focus to the field, so its description (the error) is read.
+- Baseline before fixes: 0 serious/critical violations; contrast of every brand token pair already ≥ 4.5:1 text / ≥ 3:1 non-text (lowest: demo `textSecondary` on `subtle` 4.74, demo control border on canvas 3.27).
+
+Verified, no change needed: heading order (axe `heading-order`), icon-only buttons named (sheet ✕ = "Cerrar"), form errors tied with `aria-describedby` + `aria-invalid` (sign-in, profile name, admin `FieldFrame`), the two "Todas" chips sit in groups named "Filtrar por práctica" / modality (E2E A), visible `:focus-visible` ring (3 px `--ring`), skip link on both layouts.
+
+Remaining (moderate/minor, accepted for now):
+- axe "needs review" inside open sheets: `aria-hidden-focus` (Radix focus guards and the `aria-hidden` page behind the modal; focus is trapped, asserted by E2E) and `color-contrast` (background hidden by the overlay; covered by the token test).
+- Opening a sheet focuses its ✕ button (Radix default), not the primary action.
+- Field errors in the grant / adjust / new-session forms are associated but not announced on submit (no focus move); consider focusing the first invalid field.
+- A banned user who requests a code sees the generic sign-in error (`user_banned` maps to `unknown`).
+- Not automated: 200 % zoom / 320 px reflow and a manual screen-reader pass (VoiceOver iOS, TalkBack) — do before launch.
 
 ## Blockers / decisions needing human input
 
@@ -106,10 +127,17 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 4. Mercado Pago in V2? (not MVP)
 5. Align pnpm between local (11) and CI (9) via `packageManager` — touches deploy pipeline.
 
+## Owner decisions 2026-10-14
+
+- Waitlist rule approved: FIFO; auto-promote only with a valid pack and more than 24 h before start; otherwise skip to the next student.
+- Throttle limits approved: 6 self-cancellations / 3 bookings of the same class per 24 h.
+- Profile: display name required (plus the sign-in email); phone not collected.
+
 ## Next step
 
 1. **Owner:** follow `docs/booking/SUPABASE_SETUP.md`; send back only the project ref + checklist (never keys).
-2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~, ~~credit-expiry job~~ done. **Phase 4.4** waitlist: needs the owner's promotion rule (proposed: FIFO; auto-promote only with a valid pack and >24 h before start; otherwise skip). Phase 5.1 and 5.2 done; next **Phase 5.3** release (a11y pass, release checklist, owner approves merge).
+2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~, ~~credit-expiry job~~ done. **Phase 4.4** waitlist: needs the owner's promotion rule (proposed: FIFO; auto-promote only with a valid pack and >24 h before start; otherwise skip). Phase 5.1, 5.2 and the pre-release hardening (throttle, erasure, a11y pass) done; next **Phase 5.3** release (remaining checklist: CAPTCHA, manual screen-reader/zoom pass, owner approves merge).
+5. **Owner:** decide whether the auth record of an erased student must also lose its email (ADR-020: Admin API step outside the app, or a schema change). Confirm the throttle defaults (6 self-cancellations / 3 bookings of one class per 24 h) or give other numbers.
 3. **Owner:** after pushing migrations, confirm the `expire-credit-grants` pg_cron job is active (`SUPABASE_SETUP.md` §4, step 4).
 4. Fix UX backlog items above.
 
@@ -120,7 +148,7 @@ Requires Docker + Supabase CLI (`brew install supabase/tap/supabase`). Local onl
 ```
 npx pnpm@9 run db:start        # start local stack (studio/storage/realtime disabled)
 supabase db reset              # re-apply migrations + fake seed
-supabase test db               # pgTAP (435 assertions)
+supabase test db               # pgTAP (520 assertions)
 npx pnpm@9 run test:db         # multi-connection race tests
 npx pnpm@9 run db:stop
 ```
@@ -139,7 +167,7 @@ Playwright runs against the static export (`out/`), never `next dev`. Only Chrom
 
 ```
 npx pnpm@9 exec playwright install chromium   # once per machine
-npx pnpm@9 run test:e2e                       # builds mock exports (bylou + demo-studio), serves them, runs 56 tests
+npx pnpm@9 run test:e2e                       # builds mock exports (bylou + demo-studio), serves them, runs 65 tests (incl. a11y)
 E2E_SKIP_BUILD=1 npx pnpm@9 run test:e2e      # reuse the cached exports
 npx pnpm@9 exec playwright test --project mobile -g "B ·"   # one project / journey
 ```

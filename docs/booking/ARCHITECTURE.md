@@ -225,6 +225,9 @@ One vocabulary for `booking/domain` decisions, RPC JSON `code`, application resu
 | `capacity_below_bookings` | `admin_update_session` (Phase 4) | New capacity < confirmed bookings | inline field error |
 | `attendance_window_closed` | `mark_attendance` (Phase 4) | Outside `starts_at − 15 min … ends_at + 7 days` | attendance read-only text |
 | `session_not_full` | `join_waitlist` (Phase 4) | Session has free spots | show "Reservar" instead |
+| `too_many_changes` | `book_session` (ADR-019) | Churn throttle: the student reached `max_self_cancellations_24h` self-cancellations, or `max_session_bookings_24h` bookings of this session, in the last 24 h (`limit`: `cancellations` / `session_rebookings`) | `sheet.tooManyChanges` + contact link in the confirm sheet, no retry |
+| `email_mismatch` | `admin_anonymize_student` (ADR-020) | Typed confirmation ≠ the student's current email | field error on the confirmation input |
+| `has_upcoming_bookings` | `admin_anonymize_student` (ADR-020) | She still has confirmed bookings of sessions that have not ended (`upcoming` = count) | `admin.erase.upcoming`: cancel them first |
 
 Idempotency-key reuse for a different target is **not** a new code: the RPC raises `22023`, mapped to `invalid_input` (DATA_MODEL §5).
 

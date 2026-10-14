@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   mapAdjustCreditsRpc,
+  mapAnonymizeStudentRpc,
   mapBookForStudentRpc,
   mapCancelForStudentRpc,
   mapGrantCreditsRpc,
@@ -30,6 +31,12 @@ describe("student summaries", () => {
       balance: 3,
       nextExpiry: "2026-11-12T03:00:00.000Z",
       nextBooking: { bookingId: "b1", sessionId: "s1", startsAt: "2026-10-15T21:00:00.000Z", classTypeName: "Hatha" },
+      anonymizedAt: null,
+    })
+    expect(toStudentSummary({ ...summary, anonymized_at: "2026-10-14T15:00:00+00:00", display_name: null, email: null })).toMatchObject({
+      displayName: null,
+      email: null,
+      anonymizedAt: "2026-10-14T15:00:00.000Z",
     })
     expect(toStudentSummary({ ...summary, next_booking: null, next_expiry: null, display_name: null })).toMatchObject({
       displayName: null,
@@ -174,5 +181,25 @@ describe("write envelopes", () => {
     })
     expect(mapCancelForStudentRpc({ ok: false, code: "cancellation_not_allowed" })).toEqual({ ok: false, code: "cancellation_not_allowed" })
     expect(mapCancelForStudentRpc(null)).toEqual({ ok: false, code: "unknown" })
+  })
+
+  it("admin_anonymize_student envelope (ADR-020)", () => {
+    expect(mapAnonymizeStudentRpc({ ok: true, code: null, user_id: "u1", anonymized_at: "2026-10-14T15:00:00+00:00", replayed: false })).toEqual({
+      ok: true,
+      userId: "u1",
+      anonymizedAt: "2026-10-14T15:00:00.000Z",
+      replayed: false,
+    })
+    expect(mapAnonymizeStudentRpc({ ok: true, user_id: "u1", anonymized_at: "2026-10-14T15:00:00Z", replayed: true })).toMatchObject({ replayed: true })
+    expect(mapAnonymizeStudentRpc({ ok: false, code: "has_upcoming_bookings", upcoming: 2 })).toEqual({
+      ok: false,
+      code: "has_upcoming_bookings",
+      upcoming: 2,
+    })
+    expect(mapAnonymizeStudentRpc({ ok: false, code: "email_mismatch" })).toEqual({ ok: false, code: "email_mismatch" })
+    expect(mapAnonymizeStudentRpc({ ok: false, code: "not_found" })).toEqual({ ok: false, code: "not_found" })
+    expect(mapAnonymizeStudentRpc({ ok: false, code: "brand_new" })).toEqual({ ok: false, code: "unknown" })
+    expect(mapAnonymizeStudentRpc({ ok: true, user_id: "u1" })).toEqual({ ok: false, code: "unknown" })
+    expect(mapAnonymizeStudentRpc(null)).toEqual({ ok: false, code: "unknown" })
   })
 })

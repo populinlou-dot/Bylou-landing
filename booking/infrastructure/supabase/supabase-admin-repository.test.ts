@@ -222,7 +222,7 @@ describe("SupabaseAdminRepository", () => {
     const { log, provider } = fakeClient({ userId: "u1", rpc: { data: { ok: true, students: [student] }, error: null, status: 200 } })
     const repo = new SupabaseAdminRepository(provider)
     expect(await repo.searchStudents("ana")).toEqual([
-      { userId: "u2", displayName: "Ana", email: null, balance: 2, nextExpiry: null, nextBooking: null },
+      { userId: "u2", displayName: "Ana", email: null, balance: 2, nextExpiry: null, nextBooking: null, anonymizedAt: null },
     ])
     await repo.searchStudents("")
     expect(log).toEqual([
@@ -287,6 +287,31 @@ describe("SupabaseAdminRepository", () => {
     })
     expect(await new SupabaseAdminRepository(cancel.provider).cancelForStudent({ bookingId: "b", refund: true })).toMatchObject({ ok: true })
     expect(cancel.log).toEqual(['rpc(admin_cancel_for, {"p_booking_id":"b","p_refund":true})'])
+  })
+
+  it("anonymizeStudent: admin_anonymize_student with the typed email; 42501 → forbidden (ADR-020)", async () => {
+    const ok = fakeClient({
+      userId: "u1",
+      rpc: { data: { ok: true, user_id: "u2", anonymized_at: "2026-10-14T15:00:00+00:00", replayed: false }, error: null, status: 200 },
+    })
+    expect(await new SupabaseAdminRepository(ok.provider).anonymizeStudent({ userId: "u2", confirmEmail: "Ana@Example.test" })).toEqual({
+      ok: true,
+      userId: "u2",
+      anonymizedAt: "2026-10-14T15:00:00.000Z",
+      replayed: false,
+    })
+    expect(ok.log).toEqual(['rpc(admin_anonymize_student, {"p_user_id":"u2","p_confirm_email":"Ana@Example.test"})'])
+    const denied = fakeClient({ userId: "u1", rpc: { data: null, error: { code: "42501", message: "forbidden" }, status: 403 } })
+    expect(await new SupabaseAdminRepository(denied.provider).anonymizeStudent({ userId: "u2", confirmEmail: "a@b.c" })).toEqual({
+      ok: false,
+      code: "forbidden",
+    })
+    const anon = fakeClient({ userId: null })
+    expect(await new SupabaseAdminRepository(anon.provider).anonymizeStudent({ userId: "u2", confirmEmail: "a@b.c" })).toEqual({
+      ok: false,
+      code: "unauthenticated",
+    })
+    expect(anon.log).toEqual([])
   })
 
   it("Phase 4.3 writes are unauthenticated without a session and make no call", async () => {

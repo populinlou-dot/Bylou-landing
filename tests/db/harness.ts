@@ -87,9 +87,34 @@ export class Actor {
     return rows[0].r
   }
 
+  /** Staff-only RPC (AD-08): a pack for a student, with a note. */
+  async grantCredits(userId: string, credits: number, note: string, key: string = randomUUID()): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.grant_credits($1, $2, 30, $3, $4) as r", [
+      userId,
+      credits,
+      note,
+      key,
+    ])
+    return rows[0].r
+  }
+
+  /** Staff-only RPC (ADR-020): erase a student's personal data, keeping her history. */
+  async anonymize(userId: string, confirmEmail: string): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.admin_anonymize_student($1, $2) as r", [
+      userId,
+      confirmEmail,
+    ])
+    return rows[0].r
+  }
+
   end(): Promise<void> {
     return this.client.end()
   }
+}
+
+export interface ThrottleLimits {
+  cancellations: number | null
+  perSession: number | null
 }
 
 /** Owner connection (role postgres) for fixtures, gates and assertions. */
@@ -118,6 +143,23 @@ export class Admin {
       [id, `race-${id}@example.test`],
     )
     return id
+  }
+
+  /**
+   * Churn throttle limits (ADR-019; null = off). Journeys that book and cancel with the same student
+   * many times on purpose switch it off and restore the previous values afterwards.
+   */
+  async throttle(limits?: ThrottleLimits): Promise<ThrottleLimits> {
+    const previous = await this.one<ThrottleLimits>(
+      "select max_self_cancellations_24h as cancellations, max_session_bookings_24h as \"perSession\" from public.studio_settings where id = 1",
+    )
+    if (limits) {
+      await this.client.query(
+        "update public.studio_settings set max_self_cancellations_24h = $1, max_session_bookings_24h = $2 where id = 1",
+        [limits.cancellations, limits.perSession],
+      )
+    }
+    return previous
   }
 
   async staffId(): Promise<string> {
@@ -235,4 +277,5 @@ export class Admin {
 }
 
 export const LOCK_SESSION = "select 1 from public.sessions where id = $1 for update"
+export const LOCK_PROFILE = "select 1 from public.profiles where id = $1 for update"
 export const LOCK_GRANT = "select 1 from public.credit_grants where id = $1 for update"

@@ -11,6 +11,7 @@ import {
   type Modality,
   type StudioRules,
 } from "../../domain"
+import { BOOK_RPC_CODES } from "../../application"
 import type {
   AuthCode,
   BookCode,
@@ -25,7 +26,7 @@ import type {
   TransportCode,
 } from "../../application"
 
-const BOOK_CODES: readonly string[] = [...BOOKING_REJECTION_CODES, "not_found"]
+const BOOK_CODES: readonly string[] = [...BOOKING_REJECTION_CODES, ...BOOK_RPC_CODES]
 const CANCEL_CODES: readonly string[] = [...CANCELLATION_CODES, "not_found", "not_owner"]
 
 type Json = Record<string, unknown>

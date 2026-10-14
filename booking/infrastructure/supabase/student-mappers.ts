@@ -8,12 +8,15 @@
 import type { CreditLedgerReason } from "../../domain"
 import {
   ADJUST_CREDITS_CODES,
+  ANONYMIZE_STUDENT_CODES,
   BOOK_FOR_STUDENT_CODES,
   CANCEL_FOR_STUDENT_CODES,
   type AdjustCreditsCode,
   type AdjustCreditsResult,
   type AdminGrantView,
   type AdminLedgerEntry,
+  type AnonymizeStudentCode,
+  type AnonymizeStudentResult,
   type BookForStudentCode,
   type BookForStudentResult,
   type BookingSource,
@@ -53,6 +56,7 @@ export function toStudentSummary(data: unknown): StudentSummary | null {
     balance: data.balance,
     nextExpiry: isoOrNull(data.next_expiry),
     nextBooking,
+    anonymizedAt: isoOrNull(data.anonymized_at),
   }
 }
 
@@ -231,6 +235,22 @@ export function mapCancelForStudentRpc(data: unknown): CancelForStudentResult {
   }
   if (data.ok === false && typeof data.code === "string" && CANCEL_FOR_CODES.includes(data.code)) {
     return { ok: false, code: data.code as CancelForStudentCode }
+  }
+  return { ok: false, code: "unknown" }
+}
+
+const ANONYMIZE_CODES: readonly string[] = ANONYMIZE_STUDENT_CODES
+
+/** `admin_anonymize_student` jsonb → AnonymizeStudentResult (migration 20261014001200). */
+export function mapAnonymizeStudentRpc(data: unknown): AnonymizeStudentResult {
+  if (!isObject(data)) return { ok: false, code: "unknown" }
+  const anonymizedAt = isoOrNull(data.anonymized_at)
+  if (data.ok === true && typeof data.user_id === "string" && anonymizedAt) {
+    return { ok: true, userId: data.user_id, anonymizedAt, replayed: data.replayed === true }
+  }
+  if (data.ok === false && typeof data.code === "string" && ANONYMIZE_CODES.includes(data.code)) {
+    const code = data.code as AnonymizeStudentCode
+    return isCount(data.upcoming) ? { ok: false, code, upcoming: data.upcoming } : { ok: false, code }
   }
   return { ok: false, code: "unknown" }
 }

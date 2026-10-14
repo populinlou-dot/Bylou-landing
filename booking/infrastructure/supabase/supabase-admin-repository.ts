@@ -5,7 +5,7 @@
  * someone else's. Every write goes through a staff RPC that starts with `private.assert_staff()`
  * (ADR-005, ADR-015): mark_attendance, create_session, admin_upsert_class_type,
  * admin_update_session, admin_cancel_session, grant_credits, admin_adjust_credits, admin_book_for,
- * admin_cancel_for. Student balances come from the staff read RPCs admin_search_students /
+ * admin_cancel_for, admin_anonymize_student. Student balances come from the staff read RPCs admin_search_students /
  * admin_student_summary, so they always match the server's definition (Phase 4.3).
  */
 import {
@@ -14,6 +14,8 @@ import {
   type AdjustCreditsResult,
   type AdminGrantView,
   type AdminLedgerEntry,
+  type AnonymizeStudentCommand,
+  type AnonymizeStudentResult,
   type BookForStudentCommand,
   type BookForStudentResult,
   type CancelForStudentCommand,
@@ -57,6 +59,7 @@ import {
 import { mapPostgrestError, type PostgrestErrorLike } from "./mappers"
 import {
   mapAdjustCreditsRpc,
+  mapAnonymizeStudentRpc,
   mapBookForStudentRpc,
   mapCancelForStudentRpc,
   mapGrantCreditsRpc,
@@ -332,6 +335,16 @@ export class SupabaseAdminRepository implements AdminRepository {
     })) as Response<unknown>
     if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
     return mapCancelForStudentRpc(response.data)
+  }
+
+  async anonymizeStudent(cmd: AnonymizeStudentCommand): Promise<AnonymizeStudentResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("admin_anonymize_student", {
+      p_user_id: cmd.userId,
+      p_confirm_email: cmd.confirmEmail,
+    })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapAnonymizeStudentRpc(response.data)
   }
 
   /** Local session only (UX); the database re-checks auth.uid() and the role on every call. */

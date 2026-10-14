@@ -24,12 +24,15 @@ import {
 import {
   RepositoryError,
   addDays,
+  eraseConfirmationMatches,
   localDateOf,
   zonedTimeToInstant,
   type AdjustCreditsCommand,
   type AdjustCreditsResult,
   type AdminGrantView,
   type AdminLedgerEntry,
+  type AnonymizeStudentCommand,
+  type AnonymizeStudentResult,
   type BookForStudentCommand,
   type BookForStudentResult,
   type CancelForStudentCommand,
@@ -315,6 +318,8 @@ export class MockAdminRepository implements AdminRepository {
     const needle = fold(query.trim())
     return this.studentIds()
       .map((id) => this.summaryOf(id))
+      // Anonymized students leave the list (admin_search_students), like the server.
+      .filter((s) => s.anonymizedAt === null)
       .filter((s) => !needle || [s.displayName, s.email].some((text) => text !== null && fold(text).includes(needle)))
       .sort((a, b) => this.sortLabel(a).localeCompare(this.sortLabel(b), "es") || (a.userId < b.userId ? -1 : 1))
       .slice(0, SEARCH_LIMIT)
@@ -402,7 +407,8 @@ export class MockAdminRepository implements AdminRepository {
       if (!grant || grant.userId !== cmd.userId || grant.total !== cmd.credits) return { ok: false, code: "invalid_input" }
       return { ok: true, grantId: grant.id, credits: grant.total, expiresAt: grant.expiresAt, replayed: true }
     }
-    if (!this.isStudent(cmd.userId)) return { ok: false, code: "not_found" }
+    // An anonymized student gets no new pack (grant_credits → not_found), so no new note either.
+    if (!this.isStudent(cmd.userId) || state.anonymizedAt[cmd.userId]) return { ok: false, code: "not_found" }
     const now = this.options.clock.now()
     const tz = state.rules.timezone
     const grant: CreditGrant = {
@@ -451,7 +457,7 @@ export class MockAdminRepository implements AdminRepository {
       }
     }
     const grant = state.grants.find((g) => g.id === cmd.grantId)
-    if (!grant) return { ok: false, code: "not_found" }
+    if (!grant || state.anonymizedAt[grant.userId]) return { ok: false, code: "not_found" }
     const now = this.options.clock.now()
     if (toEpochMs(grant.expiresAt) <= now.getTime()) return { ok: false, code: "grant_expired" }
     if (grant.remaining + cmd.delta < 0) return { ok: false, code: "insufficient_balance", creditsRemaining: grant.remaining }
@@ -492,7 +498,7 @@ export class MockAdminRepository implements AdminRepository {
       if (!prior || prior.sessionId !== cmd.sessionId) return { ok: false, code: "invalid_input" }
       return { ok: true, bookingId: prior.id, replayed: true, remainingCredits: this.summaryOf(cmd.userId).balance }
     }
-    if (!this.isStudent(cmd.userId)) return { ok: false, code: "not_found" }
+    if (!this.isStudent(cmd.userId) || state.anonymizedAt[cmd.userId]) return { ok: false, code: "not_found" }
     const session = state.sessions.find((x) => x.id === cmd.sessionId)
     if (!session) return { ok: false, code: "not_found" }
     const now = this.options.clock.now()
@@ -569,6 +575,44 @@ export class MockAdminRepository implements AdminRepository {
     return { ok: true, bookingId: booking.id, refunded, refundSkipped, replayed: false }
   }
 
+  /**
+   * Mirrors admin_anonymize_student (ADR-020): typo guard on the current email, refused while she has an
+   * upcoming confirmed booking, then name/email gone and pack/ledger notes erased; history is kept.
+   */
+  async anonymizeStudent(cmd: AnonymizeStudentCommand): Promise<AnonymizeStudentResult> {
+    await this.delay()
+    const denied = this.writeDenied()
+    if (denied) return { ok: false, code: denied }
+    const confirm = cmd.confirmEmail.trim().toLowerCase()
+    if (!confirm || confirm.length > 320) return { ok: false, code: "invalid_input" }
+    if (!this.isStudent(cmd.userId)) return { ok: false, code: "not_found" }
+    const state = this.state()
+    const prior = state.anonymizedAt[cmd.userId]
+    if (prior) return { ok: true, userId: cmd.userId, anonymizedAt: prior, replayed: true }
+    // Her email; without one, her exact name or her id (same rule as the RPC).
+    if (!eraseConfirmationMatches(cmd.confirmEmail, { userId: cmd.userId, ...this.profileOf(cmd.userId) })) {
+      return { ok: false, code: "email_mismatch" }
+    }
+    const summary = this.summaryOf(cmd.userId)
+    if (summary.nextBooking) {
+      const now = this.options.clock.now().getTime()
+      const upcoming = state.bookings.filter((b) => {
+        const session = state.sessions.find((s) => s.id === b.sessionId)
+        return b.userId === cmd.userId && b.status === "confirmed" && session?.status === "scheduled" && toEpochMs(session.endsAt) > now
+      }).length
+      return { ok: false, code: "has_upcoming_bookings", upcoming }
+    }
+    for (const grant of state.grants) {
+      const meta = state.grantMeta[grant.id]
+      if (grant.userId === cmd.userId && meta) meta.note = null
+    }
+    for (const entry of state.ledger) if (entry.userId === cmd.userId) entry.note = null
+    delete state.displayNames[cmd.userId]
+    const anonymizedAt = this.options.clock.now().toISOString()
+    state.anonymizedAt[cmd.userId] = anonymizedAt
+    return { ok: true, userId: cmd.userId, anonymizedAt, replayed: false }
+  }
+
   /** Demo students: the demo student, every fictional booker and anyone holding a pack (never staff). */
   private studentIds(): string[] {
     const { bookings, grants } = this.state()
@@ -612,6 +656,7 @@ export class MockAdminRepository implements AdminRepository {
             classTypeName: classTypes.find((ct) => ct.id === next.session.classTypeId)?.name ?? "—",
           }
         : null,
+      anonymizedAt: this.state().anonymizedAt[userId] ?? null,
     }
   }
 
@@ -621,6 +666,7 @@ export class MockAdminRepository implements AdminRepository {
 
   /** Demo profile, with any name the student saved through the profile step (shared state). */
   private profileOf(userId: string): { displayName: string | null; email: string | null } {
+    if (this.state().anonymizedAt[userId]) return { displayName: null, email: null }
     const saved = this.state().displayNames[userId]
     return saved === undefined ? demoProfile(userId) : { ...demoProfile(userId), displayName: saved }
   }

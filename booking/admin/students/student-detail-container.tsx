@@ -7,6 +7,7 @@ import { useBooking, useCopy, useReadyRuntime } from "../../ui/booking-context"
 import { formatDayMonth } from "../../ui/format"
 import { useAdminRepository } from "../admin-context"
 import { AdjustCreditsSheet, GrantPackSheet } from "./credit-sheets"
+import { EraseSheet } from "./erase-sheet"
 import { BookForSheet, CancelForSheet } from "./on-behalf-sheets"
 import { StudentDetailView, type StudentDetailLoadState } from "./student-detail-view"
 import { studentName } from "./student-format"
@@ -16,6 +17,7 @@ type OpenSheet =
   | { kind: "adjust"; grant: AdminGrantView }
   | { kind: "bookFor"; n: number }
   | { kind: "cancelFor"; booking: StudentBookingView }
+  | { kind: "erase" }
   | null
 
 /**
@@ -101,6 +103,10 @@ export function StudentDetailContainer({ id }: { id: string | null }) {
             setNotice(null)
             setSheet({ kind: "cancelFor", booking })
           },
+          onErase: () => {
+            setNotice(null)
+            setSheet({ kind: "erase" })
+          },
         }}
       />
       {detail && sheet?.kind === "grant" ? (
@@ -159,6 +165,14 @@ export function StudentDetailContainer({ id }: { id: string | null }) {
                   : t("admin.cancelFor.noRefund"),
             )
           }
+        />
+      ) : null}
+      {detail && sheet?.kind === "erase" ? (
+        <EraseSheet
+          target={detail.student}
+          studentName={name}
+          onClose={() => setSheet(null)}
+          onErased={(result) => done(result.replayed ? t("admin.erase.replayed") : t("admin.erase.done"))}
         />
       ) : null}
     </>

@@ -93,6 +93,20 @@ describe("Confirm sheet", () => {
     expect(within(dialog).queryByRole("button", { name: /Confirmar|Reintentar/ })).toBeNull()
   })
 
+  it("explains the churn throttle (too_many_changes), points to the studio and offers no retry", async () => {
+    const repository = fakeRepository([item])
+    vi.spyOn(repository, "book").mockResolvedValue({ ok: false, code: "too_many_changes" })
+    renderAction(repository)
+    fireEvent.click(screen.getByRole("button", { name: "Reservar" }))
+    const dialog = await screen.findByRole("dialog")
+    await within(dialog).findByText("Usás 1 de tus 3 clases.")
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirmar reserva" }))
+    const alert = await within(dialog).findByRole("alert")
+    expect(alert.textContent).toContain("En las últimas 24 horas hiciste muchos cambios en tus reservas.")
+    expect(within(alert).getByRole("link", { name: "Escribile a Lou" })).toBeTruthy()
+    expect(within(dialog).queryByRole("button", { name: /Confirmar|Reintentar/ })).toBeNull()
+  })
+
   it("previews 'no pack' instead of a confirm button when the balance is empty", async () => {
     const repository = fakeRepository([item], { balance: { ...DEFAULT_BALANCE, available: 0, activeGrants: [] } })
     renderAction(repository)

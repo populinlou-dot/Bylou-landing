@@ -22,20 +22,23 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <a href={`#${MAIN_ID}`} className="booking-skip-link">
         {t("layout.skip")}
       </a>
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
-          <Link href={ADMIN_PATH} className="inline-flex min-h-11 items-center gap-2 rounded-full text-foreground">
-            <span className="[font-family:var(--font-display)] text-[18px] font-medium tracking-[-0.01em]">
-              {brand.logo.wordmark}
-            </span>
-            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
-              {t("admin.label")}
-            </span>
-          </Link>
-          {runtime.status === "ready" ? <AdminAccountNav /> : null}
+      <header>
+        <div className="border-b border-border bg-card">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+            <Link href={ADMIN_PATH} className="inline-flex min-h-11 items-center gap-2 rounded-full text-foreground">
+              <span className="[font-family:var(--font-display)] text-[18px] font-medium tracking-[-0.01em]">
+                {brand.logo.wordmark}
+              </span>
+              <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+                {t("admin.label")}
+              </span>
+            </Link>
+            {runtime.status === "ready" ? <AdminAccountNav /> : null}
+          </div>
         </div>
+        {/* Inside the banner landmark, so no page content sits outside a landmark (axe `region`). */}
+        {runtime.status === "ready" && runtime.isDemo ? <DemoBanner /> : null}
       </header>
-      {runtime.status === "ready" && runtime.isDemo ? <DemoBanner /> : null}
       <main id={MAIN_ID} tabIndex={-1} className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
         <BookingRuntimeGate>
           <StaffGuard>{children}</StaffGuard>
@@ -50,7 +53,7 @@ function AdminAccountNav() {
   const auth = useAuthState()
   const { auth: authPort } = useReadyRuntime()
   const linkClass =
-    "inline-flex min-h-11 items-center rounded-full px-2 text-[14.5px] font-semibold text-primary underline-offset-4 hover:underline"
+    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2 text-[14.5px] font-semibold text-primary underline-offset-4 hover:underline"
   return (
     <nav className="flex flex-wrap items-center justify-end gap-x-1 sm:gap-x-3">
       <Link href={ADMIN_PATH} className={linkClass}>

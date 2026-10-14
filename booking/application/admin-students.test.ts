@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest"
 import {
   adjustAmountMax,
   adjustCredits,
+  anonymizeStudent,
   bookForStudent,
+  eraseConfirmationKind,
+  eraseConfirmationMatches,
   cancelForStudent,
   defaultPackExpiry,
   getStudentDetail,
@@ -14,6 +17,7 @@ import {
   searchStudents,
   sortLedger,
   validateAdjustDraft,
+  validateEraseConfirmation,
   validateGrantDraft,
 } from "./admin-students"
 import { RepositoryError } from "./ports"
@@ -214,5 +218,45 @@ describe("book / cancel on behalf (AD-10)", () => {
     expect(await cancelForStudent({ admin }, { bookingId: "b", refund: true })).toEqual({ ok: false, code: "forbidden" })
     expect(await cancelForStudent({ admin }, { bookingId: "b", refund: false })).toMatchObject({ ok: true, refunded: false })
     expect(await cancelForStudent({ admin }, { bookingId: "../b", refund: true })).toEqual({ ok: false, code: "invalid_input" })
+  })
+})
+
+describe("account erasure (ADR-020)", () => {
+  const USER = "0b5e0000-0000-4000-8000-0000000000aa"
+
+  it("with an email: matches it trimmed and case-insensitively, and nothing else", () => {
+    const ana = { userId: USER, email: "ana@example.test", displayName: "Ana" }
+    expect(eraseConfirmationKind(ana)).toBe("email")
+    expect(eraseConfirmationMatches("  Ana@Example.TEST ", ana)).toBe(true)
+    expect(eraseConfirmationMatches("ana@example.tes", ana)).toBe(false)
+    expect(eraseConfirmationMatches("Ana", ana)).toBe(false)
+    expect(eraseConfirmationMatches(USER, ana)).toBe(false)
+    expect(validateEraseConfirmation(" ", ana)).toBe("required")
+    expect(validateEraseConfirmation("otra@example.test", ana)).toBe("invalid")
+    expect(validateEraseConfirmation("ANA@example.test", ana)).toBeNull()
+  })
+
+  it("without a confirmed email: her exact name or her user id (any case)", () => {
+    const eva = { userId: USER, email: null, displayName: "Eva Sin Mail" }
+    expect(eraseConfirmationKind(eva)).toBe("name_or_id")
+    expect(eraseConfirmationMatches(" Eva Sin Mail ", eva)).toBe(true)
+    expect(eraseConfirmationMatches("eva sin mail", eva)).toBe(false)
+    expect(eraseConfirmationMatches(USER.toUpperCase(), eva)).toBe(true)
+    const nameless = { userId: USER, email: null, displayName: null }
+    expect(eraseConfirmationKind(nameless)).toBe("id")
+    expect(eraseConfirmationMatches(USER, nameless)).toBe(true)
+    expect(eraseConfirmationMatches("", nameless)).toBe(false)
+  })
+
+  it("validates before calling, trims the email, and maps transport failures", async () => {
+    const admin = fakeAdminRepository()
+    expect(await anonymizeStudent({ admin }, { userId: "not an id", confirmEmail: "a@b.c" })).toEqual({ ok: false, code: "invalid_input" })
+    expect(await anonymizeStudent({ admin }, { userId: USER, confirmEmail: "   " })).toEqual({ ok: false, code: "invalid_input" })
+    expect(await anonymizeStudent({ admin }, { userId: USER, confirmEmail: `${"a".repeat(320)}@b.c` })).toEqual({ ok: false, code: "invalid_input" })
+    expect(admin.calls).toEqual([])
+    expect(await anonymizeStudent({ admin }, { userId: USER, confirmEmail: " ana@example.test " })).toMatchObject({ ok: true })
+    expect(admin.calls).toEqual([`anonymizeStudent ${USER} ana@example.test`])
+    vi.spyOn(admin, "anonymizeStudent").mockRejectedValueOnce(new RepositoryError("network_error"))
+    expect(await anonymizeStudent({ admin }, { userId: USER, confirmEmail: "ana@example.test" })).toEqual({ ok: false, code: "network_error" })
   })
 })

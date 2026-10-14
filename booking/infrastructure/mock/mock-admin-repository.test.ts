@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   adjustCredits,
+  anonymizeStudent,
   bookForStudent,
   cancelForStudent,
   cancelSession,
@@ -357,6 +358,51 @@ describe("MockAdminRepository Phase 4.3 students + credits (mirror the RPCs)", (
     const after = await getStudentDetail({ admin, repository, clock }, { id: DEMO_USER_ID })
     expect(after!.ledger.filter((e) => e.reason === "cancel_refund" && e.bookingId === bookingId)).toHaveLength(1)
     expect(ledgerMismatches(repository)).toEqual([])
+  })
+
+  it("erases a student's personal data (ADR-020): email guard, upcoming bookings first, history kept, idempotent", async () => {
+    const { admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    const id = "demo-user-4" // the one demo student without a name: her email is shown, so it can be confirmed
+    const before = await getStudentDetail({ admin, repository, clock }, { id })
+    const email = before!.student.email!
+    expect(before!.upcoming.length).toBeGreaterThan(0)
+    expect(await anonymizeStudent({ admin }, { userId: id, confirmEmail: "otra@demo.test" })).toEqual({ ok: false, code: "email_mismatch" })
+    expect(await anonymizeStudent({ admin }, { userId: id, confirmEmail: "   " })).toEqual({ ok: false, code: "invalid_input" })
+    expect(await anonymizeStudent({ admin }, { userId: DEMO_STAFF_ID, confirmEmail: email })).toEqual({ ok: false, code: "not_found" })
+
+    for (const booking of before!.upcoming) {
+      expect(await anonymizeStudent({ admin }, { userId: id, confirmEmail: email })).toMatchObject({ ok: false, code: "has_upcoming_bookings" })
+      await cancelForStudent({ admin }, { bookingId: booking.bookingId, refund: true })
+    }
+    const erased = await anonymizeStudent({ admin }, { userId: id, confirmEmail: `  ${email.toUpperCase()} ` })
+    expect(erased).toEqual({ ok: true, userId: id, anonymizedAt: NOW, replayed: false })
+    expect(await anonymizeStudent({ admin }, { userId: id, confirmEmail: email })).toEqual({ ok: true, userId: id, anonymizedAt: NOW, replayed: true })
+
+    const after = await getStudentDetail({ admin, repository, clock }, { id })
+    expect(after!.student).toMatchObject({ displayName: null, email: null, anonymizedAt: NOW })
+    expect(after!.history.length + after!.upcoming.length).toBe(before!.history.length + before!.upcoming.length)
+    expect(after!.ledger.every((e) => e.note === null)).toBe(true)
+    expect((await searchStudents({ admin }, "")).some((s) => s.userId === id)).toBe(false)
+    expect(await bookForStudent({ admin }, { userId: id, sessionId: before!.history[0]?.sessionId ?? "x", requestKey: KEY_B })).toEqual({
+      ok: false,
+      code: "not_found",
+    })
+    expect(ledgerMismatches(repository)).toEqual([])
+  })
+
+  it("without a confirmed email the student's exact name confirms the erasure; no packs or adjustments afterwards", async () => {
+    const { admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    const id = "demo-user-1" // "Ana (demo)": a name, no email
+    expect(await anonymizeStudent({ admin }, { userId: id, confirmEmail: "ana (demo)" })).toEqual({ ok: false, code: "email_mismatch" })
+    await grantPack({ admin, clock }, { userId: id, draft: { credits: 2, expiresOn: "2026-11-12", note: "Pack de Ana" }, requestKey: KEY_G }, { timezone: TZ })
+    const grantId = (await admin.listStudentGrants(id))[0].id
+    for (const booking of (await getStudentDetail({ admin, repository, clock }, { id }))!.upcoming) {
+      await cancelForStudent({ admin }, { bookingId: booking.bookingId, refund: true })
+    }
+    expect(await anonymizeStudent({ admin }, { userId: id, confirmEmail: " Ana (demo) " })).toMatchObject({ ok: true, replayed: false })
+    expect((await admin.listStudentGrants(id)).every((g) => g.note === null)).toBe(true)
+    expect(await admin.grantCredits({ userId: id, credits: 1, validDays: 1, note: "x", requestKey: KEY_B })).toEqual({ ok: false, code: "not_found" })
+    expect(await admin.adjustCredits({ grantId, delta: -1, reason: "x", requestKey: KEY_ADJ })).toEqual({ ok: false, code: "not_found" })
   })
 
   it("mirrors the credit-expiry job: the expired demo pack has one expiry row and Σ ledger = balance", async () => {

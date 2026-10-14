@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertCircle, ArrowLeft, CalendarPlus, Package, RotateCw, SearchX, SlidersHorizontal, XCircle } from "lucide-react"
+import { AlertCircle, ArrowLeft, CalendarPlus, Package, RotateCw, SearchX, SlidersHorizontal, Trash2, XCircle } from "lucide-react"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import {
@@ -27,6 +27,8 @@ export interface StudentDetailActions {
   onAdjust: (grant: AdminGrantView) => void
   onBookFor: () => void
   onCancelFor: (booking: StudentBookingView) => void
+  /** Opens the erase (anonymize) confirm sheet (ADR-020). */
+  onErase: () => void
 }
 
 const sectionTitle = "[font-family:var(--font-display)] text-[21px] font-medium leading-tight text-foreground"
@@ -59,6 +61,7 @@ export function StudentDetailView({
   actions: StudentDetailActions
 }) {
   const t = useCopy()
+  const { brand } = useBooking()
 
   if (load.status === "loading") return <StudentDetailSkeleton />
 
@@ -96,7 +99,8 @@ export function StudentDetailView({
   }
 
   const { detail } = load
-  const name = studentName(detail.student, t)
+  const anonymized = detail.student.anonymizedAt !== null
+  const name = anonymized ? t("admin.erase.anonymousName") : studentName(detail.student, t)
   const showEmail = Boolean(detail.student.displayName?.trim() && detail.student.email)
 
   return (
@@ -111,22 +115,42 @@ export function StudentDetailView({
           {name}
         </h1>
         {showEmail ? <p className="break-all text-[15px] text-muted-foreground">{detail.student.email}</p> : null}
+        {detail.student.anonymizedAt ? (
+          <p className="text-[15px] text-muted-foreground">
+            {t("admin.erase.anonymized", { date: formatDayMonth(localDateOf(detail.student.anonymizedAt, detail.timezone), brand.locale) })}
+          </p>
+        ) : null}
       </header>
 
       <p role="status" aria-live="polite" className="text-[14.5px] font-semibold text-[color:var(--success)] empty:hidden">
         {notice ?? ""}
       </p>
 
-      <BalanceCard detail={detail} actions={actions} />
-      <PacksSection detail={detail} onAdjust={actions.onAdjust} />
+      {/* An anonymized student keeps her history, read-only: no more packs, bookings or adjustments. */}
+      <BalanceCard detail={detail} actions={anonymized ? null : actions} />
+      <PacksSection detail={detail} onAdjust={anonymized ? null : actions.onAdjust} />
       <BookingsSection title={t("admin.student.upcoming")} empty={t("admin.student.noUpcoming")} bookings={detail.upcoming} timezone={detail.timezone} onCancelFor={actions.onCancelFor} />
       <BookingsSection title={t("admin.student.history")} empty={t("admin.student.noHistory")} bookings={detail.history} timezone={detail.timezone} />
       <LedgerSection entries={detail.ledger} timezone={detail.timezone} />
+      {anonymized ? null : <EraseSection onErase={actions.onErase} />}
     </article>
   )
 }
 
-function BalanceCard({ detail, actions }: { detail: StudentDetail; actions: StudentDetailActions }) {
+function EraseSection({ onErase }: { onErase: () => void }) {
+  const t = useCopy()
+  return (
+    <Section id="admin-student-erase" title={t("admin.erase.section")}>
+      <p className="text-[14.5px] text-muted-foreground">{t("admin.erase.intro")}</p>
+      <button type="button" onClick={onErase} className={cx(buttonClass.secondary, "self-start border-destructive text-destructive")}>
+        <Trash2 aria-hidden="true" className="size-4" />
+        {t("admin.erase.cta")}
+      </button>
+    </Section>
+  )
+}
+
+function BalanceCard({ detail, actions }: { detail: StudentDetail; actions: StudentDetailActions | null }) {
   const { brand } = useBooking()
   const t = useCopy()
   const { student } = detail
@@ -140,16 +164,18 @@ function BalanceCard({ detail, actions }: { detail: StudentDetail; actions: Stud
           {t("admin.student.expiry", { date: packLastDay(student.nextExpiry, detail.timezone, brand.locale) })}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={actions.onGrant} className={buttonClass.primary}>
-          <Package aria-hidden="true" className="size-4" />
-          {t("admin.grant.cta")}
-        </button>
-        <button type="button" onClick={actions.onBookFor} className={buttonClass.secondary}>
-          <CalendarPlus aria-hidden="true" className="size-4" />
-          {t("admin.bookFor.cta")}
-        </button>
-      </div>
+      {actions ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={actions.onGrant} className={buttonClass.primary}>
+            <Package aria-hidden="true" className="size-4" />
+            {t("admin.grant.cta")}
+          </button>
+          <button type="button" onClick={actions.onBookFor} className={buttonClass.secondary}>
+            <CalendarPlus aria-hidden="true" className="size-4" />
+            {t("admin.bookFor.cta")}
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -165,7 +191,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
   )
 }
 
-function PacksSection({ detail, onAdjust }: { detail: StudentDetail; onAdjust: (grant: AdminGrantView) => void }) {
+function PacksSection({ detail, onAdjust }: { detail: StudentDetail; onAdjust: ((grant: AdminGrantView) => void) | null }) {
   const { brand } = useBooking()
   const t = useCopy()
   return (
@@ -183,15 +209,17 @@ function PacksSection({ detail, onAdjust }: { detail: StudentDetail; onAdjust: (
                 </p>
                 {/* Staff-entered note, visible to the student too: plain text only. */}
                 {grant.note ? <p className="whitespace-pre-line break-words text-[14.5px] text-muted-foreground">{grant.note}</p> : null}
-                <button
-                  type="button"
-                  onClick={() => onAdjust(grant)}
-                  aria-label={t("admin.adjust.ctaLabel", { date })}
-                  className={cx(buttonClass.link, "self-start")}
-                >
-                  <SlidersHorizontal aria-hidden="true" className="size-4" />
-                  {t("admin.adjust.cta")}
-                </button>
+                {onAdjust ? (
+                  <button
+                    type="button"
+                    onClick={() => onAdjust(grant)}
+                    aria-label={t("admin.adjust.ctaLabel", { date })}
+                    className={cx(buttonClass.link, "self-start")}
+                  >
+                    <SlidersHorizontal aria-hidden="true" className="size-4" />
+                    {t("admin.adjust.cta")}
+                  </button>
+                ) : null}
               </li>
             )
           })}

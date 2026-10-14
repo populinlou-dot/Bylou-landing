@@ -282,6 +282,7 @@ export function studentSummary(id: string, overrides: Partial<StudentSummary> = 
     balance: 3,
     nextExpiry: "2026-11-12T03:00:00.000Z",
     nextBooking: null,
+    anonymizedAt: null,
     ...overrides,
   }
 }
@@ -418,6 +419,10 @@ export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminReposi
     async cancelForStudent(cmd) {
       calls.push(`cancelForStudent ${cmd.bookingId} ${cmd.refund}`)
       return { ok: true, bookingId: cmd.bookingId, refunded: cmd.refund, refundSkipped: false, replayed: false }
+    },
+    async anonymizeStudent(cmd) {
+      calls.push(`anonymizeStudent ${cmd.userId} ${cmd.confirmEmail}`)
+      return { ok: true, userId: cmd.userId, anonymizedAt: "2026-10-14T12:00:00.000Z", replayed: false }
     },
   }
 }

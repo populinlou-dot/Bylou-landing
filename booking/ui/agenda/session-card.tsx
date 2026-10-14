@@ -44,7 +44,8 @@ export function SessionCard({ entry, timezone }: { entry: AgendaEntry; timezone:
         <Link
           href={{ pathname: SESSION_DETAIL_PATH, query: { id: session.id } }}
           className={cx(
-            "rounded-sm text-foreground underline-offset-4 hover:text-primary hover:underline",
+            // 44px tall hit area (UX_DESIGN §5.2) without changing the card rhythm.
+            "-my-2 inline-flex min-h-11 items-center rounded-sm text-foreground underline-offset-4 hover:text-primary hover:underline",
             entry.state === "cancelled" && "line-through decoration-1",
           )}
         >

@@ -6,11 +6,12 @@
  */
 import { toEpochMs, type IsoDateTime } from "../domain"
 import { isValidLocalDate, toAdminDayEntry, type AdminDayEntry, type AdminDeps } from "./admin"
-import type { FieldErrors } from "./admin-sessions"
+import type { FieldError, FieldErrors } from "./admin-sessions"
 import { isValidIdempotencyKey } from "./booking-actions"
 import { isValidSessionId } from "./get-agenda"
 import {
   RepositoryError,
+  type AnonymizeStudentResult,
   type AdjustCreditsResult,
   type AdminGrantView,
   type AdminLedgerEntry,
@@ -279,6 +280,57 @@ export async function cancelForStudent(deps: Pick<AdminDeps, "admin">, cmd: Canc
   if (!isValidSessionId(cmd.bookingId) || typeof cmd.refund !== "boolean") return { ok: false, code: "invalid_input" }
   try {
     return await deps.admin.cancelForStudent({ bookingId: cmd.bookingId, refund: cmd.refund })
+  } catch (error) {
+    return { ok: false, code: failureCode(error) }
+  }
+}
+
+/* ---------- Account erasure (ADR-020) ---------- */
+
+/** Longest address the confirmation field accepts (the RPC refuses more as invalid_input). */
+export const CONFIRM_EMAIL_MAX = 320
+
+/** Who the erase sheet confirms against (a StudentSummary is enough). */
+export type EraseTarget = Pick<StudentSummary, "userId" | "email" | "displayName">
+
+/** What the staff member has to type: her email, or (no confirmed email) her name or her id. */
+export function eraseConfirmationKind(target: EraseTarget): "email" | "name_or_id" | "id" {
+  if (target.email !== null) return "email"
+  return target.displayName?.trim() ? "name_or_id" : "id"
+}
+
+/**
+ * Typo guard for the erase sheet, the same comparison admin_anonymize_student makes: her current email
+ * (trimmed, case-insensitive); without a confirmed email, her exact display name (trimmed) or her user
+ * id (case-insensitive).
+ */
+export function eraseConfirmationMatches(typed: string, target: EraseTarget): boolean {
+  const text = typed.trim()
+  if (!text) return false
+  if (target.email !== null) return text.toLowerCase() === target.email.trim().toLowerCase()
+  return text.toLowerCase() === target.userId.toLowerCase() || (target.displayName !== null && text === target.displayName.trim())
+}
+
+/** Field error for the confirmation input; null when it matches. */
+export function validateEraseConfirmation(typed: string, target: EraseTarget): FieldError | null {
+  if (!typed.trim()) return "required"
+  return eraseConfirmationMatches(typed, target) ? null : "invalid"
+}
+
+/**
+ * One `admin_anonymize_student` call. Idempotent on the server (a second call → `replayed: true`), so a
+ * retry after a network failure is safe. Never optimistic: the caller reloads the detail afterwards.
+ */
+export async function anonymizeStudent(
+  deps: Pick<AdminDeps, "admin">,
+  cmd: { userId: string; confirmEmail: string },
+): Promise<AnonymizeStudentResult> {
+  const confirmEmail = cmd.confirmEmail.trim()
+  if (!isValidSessionId(cmd.userId) || !confirmEmail || confirmEmail.length > CONFIRM_EMAIL_MAX) {
+    return { ok: false, code: "invalid_input" }
+  }
+  try {
+    return await deps.admin.anonymizeStudent({ userId: cmd.userId, confirmEmail })
   } catch (error) {
     return { ok: false, code: failureCode(error) }
   }

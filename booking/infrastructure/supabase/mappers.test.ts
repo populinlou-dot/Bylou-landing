@@ -39,6 +39,7 @@ describe("mapBookRpc (book_session jsonb → BookResult)", () => {
     "session_full",
     "no_valid_credit",
     "not_found",
+    "too_many_changes",
   ])("passes through the business code %s", (code) => {
     expect(mapBookRpc({ ok: false, code, opens_at: "2026-10-20T00:00:00Z" })).toEqual({ ok: false, code })
   })

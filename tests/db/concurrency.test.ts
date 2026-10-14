@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { Actor, Admin, LOCK_GRANT, LOCK_SESSION, type RpcResult } from "./harness"
+import { Actor, Admin, LOCK_GRANT, LOCK_PROFILE, LOCK_SESSION, type RpcResult, type ThrottleLimits } from "./harness"
 
 const ITERATIONS = 20
 
@@ -133,6 +133,15 @@ describe.sequential("journey C — retries and double taps", () => {
 })
 
 describe.sequential("journey D — cancel vs book", () => {
+  // These journeys book and cancel with the same student 20 times on purpose: churn throttle off (ADR-019).
+  let savedThrottle: ThrottleLimits
+  beforeAll(async () => {
+    savedThrottle = await admin.throttle({ cancellations: null, perSession: null })
+  })
+  afterAll(async () => {
+    await admin.throttle(savedThrottle)
+  })
+
   it(`B5/D: cancel + book on a full session stay consistent (×${ITERATIONS})`, async () => {
     const [canceller, holder, booker] = await actorsFor(3)
     const outcomes = { bookerWon: 0, bookerFull: 0 }
@@ -278,6 +287,83 @@ describe.sequential("journey AD-08.2 — credit adjustment vs booking", () => {
       expect(await admin.invariantViolations([session], [userId])).toEqual([])
       await student.end() // one connection per iteration would exhaust the local pool
     }
+  })
+})
+
+describe.sequential("journey ADR-020 — erasure vs booking", () => {
+  it(`admin_anonymize_student and book_session race on one student → never an anonymized student with an upcoming booking (×${ITERATIONS})`, async () => {
+    // Closed at the end (not kept until afterAll): the local pool has few connection slots left.
+    const staff = await Actor.connect(await admin.staffId())
+    const outcomes = { booked: 0, erased: 0 }
+    try {
+      for (let i = 0; i < ITERATIONS; i++) {
+        const userId = await admin.createUser()
+        await admin.grant(userId, 5)
+        const student = await Actor.connect(userId)
+        const session = await admin.session(5)
+
+        // book_session takes the profile FOR SHARE first; the erasure takes it FOR NO KEY UPDATE.
+        const [erase, book] = await admin.race(LOCK_PROFILE, [userId], [staff, student], (a) =>
+          a === staff
+            ? a.anonymize(userId, `race-${userId}@example.test`)
+            : a.book(session).catch((error: { code?: string }) => ({ ok: false, code: error.code === "42501" ? "forbidden" : "error" })),
+        )
+
+        if (book.ok) {
+          expect(erase.code).toBe("has_upcoming_bookings")
+          outcomes.booked++
+        } else {
+          expect([erase.ok, book.code]).toEqual([true, "forbidden"])
+          outcomes.erased++
+        }
+        const { anonymized, upcoming } = await admin.one<{ anonymized: boolean; upcoming: number }>(
+          `select p.anonymized_at is not null as anonymized,
+                  (select count(*)::int from public.bookings b where b.user_id = p.id and b.status = 'confirmed') as upcoming
+             from public.profiles p where p.id = $1`,
+          [userId],
+        )
+        expect(anonymized && upcoming > 0).toBe(false)
+        expect(await admin.invariantViolations([session], [userId])).toEqual([])
+        await student.end()
+      }
+    } finally {
+      await staff.end()
+    }
+    expect(outcomes.booked + outcomes.erased).toBe(ITERATIONS)
+  })
+})
+
+describe.sequential("journey ADR-020 — erasure vs a new pack", () => {
+  it(`admin_anonymize_student and grant_credits race on one student → no pack note survives the erasure (×${ITERATIONS})`, async () => {
+    // Two staff connections, closed at the end (the local pool has few connection slots left).
+    const [eraser, granter] = await Promise.all([Actor.connect(await admin.staffId()), Actor.connect(await admin.staffId())])
+    const outcomes = { grantedFirst: 0, erasedFirst: 0 }
+    try {
+      for (let i = 0; i < ITERATIONS; i++) {
+        const userId = await admin.createUser()
+        // grant_credits takes the profile FOR SHARE first; the erasure takes it FOR NO KEY UPDATE.
+        const [erase, grant] = await admin.race(LOCK_PROFILE, [userId], [eraser, granter], (a) =>
+          a === eraser ? a.anonymize(userId, `race-${userId}@example.test`) : a.grantCredits(userId, 4, `Pack de race-${userId}`),
+        )
+        expect(erase.ok).toBe(true)
+        if (grant.ok) outcomes.grantedFirst++
+        else {
+          expect(grant.code).toBe("not_found")
+          outcomes.erasedFirst++
+        }
+        const { notes, anonymized } = await admin.one<{ notes: number; anonymized: boolean }>(
+          `select (select count(*)::int from public.credit_grants g where g.user_id = $1 and g.note is not null)
+                + (select count(*)::int from public.credit_ledger l where l.user_id = $1 and l.note is not null) as notes,
+                  (select anonymized_at is not null from public.profiles where id = $1) as anonymized`,
+          [userId],
+        )
+        expect({ notes, anonymized }).toEqual({ notes: 0, anonymized: true })
+        expect(await admin.invariantViolations([], [userId])).toEqual([])
+      }
+    } finally {
+      await Promise.all([eraser.end(), granter.end()])
+    }
+    expect(outcomes.grantedFirst + outcomes.erasedFirst).toBe(ITERATIONS)
   })
 })
 

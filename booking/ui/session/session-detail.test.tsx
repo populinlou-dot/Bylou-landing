@@ -1,9 +1,14 @@
 import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { bylouBrand } from "../../../brands/bylou"
-import { availabilityAt, fakeRepository, fixedClock } from "../../application/test-support"
+import { availabilityAt, fakeAuth, fakeRepository, fixedClock } from "../../application/test-support"
 import { BookingProvider } from "../booking-context"
 import { SessionDetailContainer } from "./session-detail-container"
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 const clock = fixedClock("2026-10-14T15:00:00.000Z")
 const repository = fakeRepository([
@@ -12,7 +17,7 @@ const repository = fakeRepository([
 
 function renderDetail(id: string | null) {
   return render(
-    <BookingProvider brand={bylouBrand} runtime={{ status: "ready", repository, clock, isDemo: true }}>
+    <BookingProvider brand={bylouBrand} runtime={{ status: "ready", repository, clock, isDemo: true, auth: fakeAuth(null) }}>
       <SessionDetailContainer id={id} />
     </BookingProvider>,
   )
@@ -27,7 +32,7 @@ describe("SessionDetailContainer", () => {
     expect(screen.getByText("Viernes 16 de octubre")).toBeTruthy()
     expect(screen.getByText("19:00 – 20:00")).toBeTruthy()
     expect(screen.getByText("Quedan 5 lugares")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Reservar" }).getAttribute("aria-disabled")).toBe("true")
+    expect(screen.getByRole("button", { name: "Reservar" }).getAttribute("aria-disabled")).toBeNull()
     // next/link drops the trailing slash outside a trailingSlash build; the export keeps it.
     expect(screen.getByRole("link", { name: "Volver a la agenda" }).getAttribute("href")).toMatch(/^\/reservas\/?$/)
   })

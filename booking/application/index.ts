@@ -1,4 +1,28 @@
-export type { BookingRepository, ClassTypeView, Clock, InstantRange, SessionAvailability } from "./ports"
+export {
+  RepositoryError,
+  TRANSPORT_CODES,
+  type AuthCode,
+  type AuthPort,
+  type AuthUser,
+  type BookCode,
+  type BookCommand,
+  type BookResult,
+  type BookingRepository,
+  type CancelCode,
+  type CancelCommand,
+  type CancelResult,
+  type ClassTypeView,
+  type Clock,
+  type CreditBalance,
+  type CreditGrantView,
+  type InstantRange,
+  type MyBooking,
+  type RequestCodeResult,
+  type SessionAvailability,
+  type SessionPrivateDetails,
+  type TransportCode,
+  type VerifyCodeResult,
+} from "./ports"
 export type { BookingConfigVariable, BookingRuntime } from "./runtime"
 export {
   getAgenda,
@@ -16,4 +40,16 @@ export {
   type SessionDetail,
   type SessionState,
 } from "./get-agenda"
+export {
+  cancelBooking,
+  getMyAccount,
+  isValidIdempotencyKey,
+  reserveSession,
+  type AccountDeps,
+  type BookingDeps,
+  type HistoryOutcome,
+  type MyAccount,
+  type MyBookingEntry,
+} from "./booking-actions"
+export { AGENDA_PATH, MY_BOOKINGS_PATH, SIGN_IN_PATH, sanitizeReturnTo, sessionHref, signInHref } from "./return-to"
 export { addDays, isoWeekday, localDateOf, startOfWeek, zonedTimeToInstant, type LocalDate } from "./time-zone"

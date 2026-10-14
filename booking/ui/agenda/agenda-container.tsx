@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { getAgendaWeek, type ClassTypeView } from "../../application"
-import { useReadyRuntime } from "../booking-context"
+import { useAuthKey, useReadyRuntime } from "../booking-context"
+import { DataRefreshContext } from "../reserve/refresh-context"
 import { AgendaView, type AgendaLoadState } from "./agenda-view"
 
 /** Container for /reservas/: owns week offset, practice filter and loading/error state. */
@@ -13,10 +14,20 @@ export function AgendaContainer() {
   const [attempt, setAttempt] = useState(0)
   const [load, setLoad] = useState<AgendaLoadState>({ status: "loading" })
   const [classTypes, setClassTypes] = useState<ClassTypeView[]>([])
+  // Reload when the signed-in user changes (myBookingId); wait until auth has resolved.
+  const authKey = useAuthKey()
+  const silent = useRef(false)
+  const refresh = useCallback(() => {
+    silent.current = true
+    setAttempt((n) => n + 1)
+  }, [])
 
   useEffect(() => {
+    if (authKey === null) return
     let active = true
-    setLoad({ status: "loading" })
+    // A silent refresh (after a booking) keeps the cards mounted so focus is not lost.
+    if (!silent.current) setLoad({ status: "loading" })
+    silent.current = false
     getAgendaWeek({ repository, clock }, { weekOffset, classTypeId }).then(
       (week) => {
         if (!active) return
@@ -32,19 +43,21 @@ export function AgendaContainer() {
     return () => {
       active = false
     }
-  }, [repository, clock, weekOffset, classTypeId, attempt])
+  }, [repository, clock, weekOffset, classTypeId, attempt, authKey])
 
   return (
-    <AgendaView
-      load={load}
-      classTypes={classTypes}
-      selectedClassTypeId={classTypeId}
-      isCurrentWeek={weekOffset === 0}
-      onSelectClassType={setClassTypeId}
-      onPreviousWeek={() => setWeekOffset((w) => w - 1)}
-      onNextWeek={() => setWeekOffset((w) => w + 1)}
-      onToday={() => setWeekOffset(0)}
-      onRetry={() => setAttempt((n) => n + 1)}
-    />
+    <DataRefreshContext.Provider value={refresh}>
+      <AgendaView
+        load={load}
+        classTypes={classTypes}
+        selectedClassTypeId={classTypeId}
+        isCurrentWeek={weekOffset === 0}
+        onSelectClassType={setClassTypeId}
+        onPreviousWeek={() => setWeekOffset((w) => w - 1)}
+        onNextWeek={() => setWeekOffset((w) => w + 1)}
+        onToday={() => setWeekOffset(0)}
+        onRetry={() => setAttempt((n) => n + 1)}
+      />
+    </DataRefreshContext.Provider>
   )
 }

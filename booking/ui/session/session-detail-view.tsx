@@ -1,13 +1,13 @@
 "use client"
 
-import { AlertCircle, ArrowLeft, CalendarClock, CalendarSearch, RotateCw, UserRound } from "lucide-react"
+import { AlertCircle, ArrowLeft, CalendarClock, CalendarSearch, MapPin, MonitorPlay, RotateCw, UserRound } from "lucide-react"
 import Link from "next/link"
 import { useId } from "react"
-import type { SessionDetail } from "../../application"
+import type { SessionDetail, SessionPrivateDetails } from "../../application"
 import { useBooking, useCopy } from "../booking-context"
 import { formatDayHeading, formatTime } from "../format"
 import { DisplayTitle, Eyebrow, SkeletonBlock, StatusPanel, buttonClass } from "../primitives"
-import { ReserveCtaPlaceholder } from "../reserve-cta"
+import { ReserveAction } from "../reserve/reserve-action"
 import { ModalityIcon, StateBadge, availabilityText, useModalityLabel } from "../session-meta"
 
 export const AGENDA_PATH = "/reservas/"
@@ -45,7 +45,15 @@ export function SessionDetailSkeleton() {
 }
 
 /** S1 detail (`/reservas/sesion/?id=`): presentational, data from SessionDetailContainer. */
-export function SessionDetailView({ load, onRetry }: { load: SessionDetailLoadState; onRetry: () => void }) {
+export function SessionDetailView({
+  load,
+  onRetry,
+  reopenSheet = false,
+}: {
+  load: SessionDetailLoadState
+  onRetry: () => void
+  reopenSheet?: boolean
+}) {
   const t = useCopy()
 
   if (load.status === "loading") return <SessionDetailSkeleton />
@@ -82,10 +90,10 @@ export function SessionDetailView({ load, onRetry }: { load: SessionDetailLoadSt
     )
   }
 
-  return <SessionDetailContent detail={load.detail} />
+  return <SessionDetailContent detail={load.detail} reopenSheet={reopenSheet} />
 }
 
-function SessionDetailContent({ detail }: { detail: SessionDetail }) {
+function SessionDetailContent({ detail, reopenSheet }: { detail: SessionDetail; reopenSheet: boolean }) {
   const { brand } = useBooking()
   const t = useCopy()
   const modalityLabel = useModalityLabel()
@@ -144,10 +152,43 @@ function SessionDetailContent({ detail }: { detail: SessionDetail }) {
           </p>
         ) : null}
 
-        {entry.state === "available" ? <ReserveCtaPlaceholder describedBy={status ? statusId : undefined} fullWidth /> : null}
+        {detail.privateDetails ? <PrivateDetails details={detail.privateDetails} /> : null}
+
+        <ReserveAction
+          entry={entry}
+          timezone={timezone}
+          describedBy={status ? statusId : undefined}
+          fullWidth
+          autoOpen={reopenSheet}
+        />
       </div>
 
       <p className="text-[13.5px] text-muted-foreground">{t("agenda.tz")}</p>
     </article>
+  )
+}
+
+/** Defense in depth (the DB CHECK already requires https): never render javascript:/data: links. */
+const SAFE_MEETING_URL = /^https:\/\/[^\s]+$/i
+
+/** Meeting link / address: rendered only when the backend returned them (booked users). */
+export function PrivateDetails({ details }: { details: SessionPrivateDetails }) {
+  const t = useCopy()
+  return (
+    <div className="flex flex-col gap-2 rounded-[var(--radius)] bg-secondary p-4 text-[15px] text-foreground">
+      {details.meetingUrl && SAFE_MEETING_URL.test(details.meetingUrl) ? (
+        <a href={details.meetingUrl} target="_blank" rel="noopener noreferrer" className={buttonClass.link}>
+          <MonitorPlay aria-hidden="true" className="size-4" />
+          {t("mine.join")}
+        </a>
+      ) : null}
+      {details.address ? (
+        <p className="flex items-start gap-2">
+          <MapPin aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary" />
+          {t("mine.address", { address: details.address })}
+        </p>
+      ) : null}
+      {details.instructions ? <p className="text-muted-foreground">{details.instructions}</p> : null}
+    </div>
   )
 }

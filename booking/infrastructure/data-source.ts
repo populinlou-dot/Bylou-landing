@@ -4,7 +4,13 @@
  */
 import type { BookingRuntime, Clock } from "../application"
 import type { StudioRules } from "../domain"
-import { MockBookingRepository } from "./mock"
+import { MockAuth, MockBookingRepository } from "./mock"
+import {
+  SupabaseAuth,
+  SupabaseBookingRepository,
+  createSupabaseClientProvider,
+  resolveSupabaseConfig,
+} from "./supabase"
 
 export const BOOKING_DATA_SOURCES = ["mock", "supabase"] as const
 export type BookingDataSource = (typeof BOOKING_DATA_SOURCES)[number]
@@ -30,6 +36,8 @@ export interface CreateRuntimeOptions {
   rules: StudioRules
   clock?: Clock
   mockLatencyMs?: number
+  /** Raw NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (required for "supabase"). */
+  supabase?: { url?: string | null; anonKey?: string | null }
 }
 
 export function createBookingRuntime(rawDataSource: string | null | undefined, options: CreateRuntimeOptions): BookingRuntime {
@@ -42,15 +50,33 @@ export function createBookingRuntime(rawDataSource: string | null | undefined, o
       received: resolution.received,
     }
   }
-  if (resolution.source === "supabase") {
-    // Supabase adapters arrive in Phase 3; until then this is an honest "not available yet".
-    return { status: "unavailable", source: "supabase" }
-  }
   const clock = options.clock ?? systemClock
+  if (resolution.source === "supabase") {
+    // Missing/invalid Supabase vars are a config error, never a fallback to mock (ADR-013).
+    const config = resolveSupabaseConfig(options.supabase?.url, options.supabase?.anonKey)
+    if (!config.ok) {
+      return { status: "config_error", reason: config.reason, variable: config.variable, received: config.received }
+    }
+    const client = createSupabaseClientProvider(config.config)
+    return {
+      status: "ready",
+      isDemo: false,
+      clock,
+      repository: new SupabaseBookingRepository(client, clock),
+      auth: new SupabaseAuth(client),
+    }
+  }
+  const auth = new MockAuth({ latencyMs: options.mockLatencyMs })
   return {
     status: "ready",
     isDemo: true,
     clock,
-    repository: new MockBookingRepository({ clock, rules: options.rules, latencyMs: options.mockLatencyMs }),
+    auth,
+    repository: new MockBookingRepository({
+      clock,
+      rules: options.rules,
+      latencyMs: options.mockLatencyMs,
+      currentUserId: () => auth.currentUserId(),
+    }),
   }
 }

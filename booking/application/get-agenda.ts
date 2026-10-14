@@ -3,7 +3,7 @@
  * Availability is a client-side PREVIEW (ADR-005); the backend stays the authority.
  */
 import { evaluateBooking, toEpochMs, type IsoDateTime, type Session, type StudioRules } from "../domain"
-import type { BookingRepository, ClassTypeView, Clock, SessionAvailability } from "./ports"
+import type { BookingRepository, ClassTypeView, Clock, SessionAvailability, SessionPrivateDetails } from "./ports"
 import { addDays, localDateOf, startOfWeek, zonedTimeToInstant, type LocalDate } from "./time-zone"
 
 export interface AgendaDeps {
@@ -31,6 +31,8 @@ export interface AgendaEntry {
   confirmedCount: number
   spotsLeft: number
   state: SessionState
+  /** Current user's confirmed booking of this session (null when signed out / not booked). */
+  myBookingId: string | null
 }
 
 export interface AgendaDay {
@@ -103,6 +105,8 @@ export interface SessionDetail {
   timezone: string
   now: IsoDateTime
   entry: AgendaEntry
+  /** Meeting link / address: only when the backend returns them (booked users, ADR-005). */
+  privateDetails: SessionPrivateDetails | null
 }
 
 /** Ids travel in the URL (`?id=`); reject anything that is not a plain token before hitting the repository. */
@@ -118,7 +122,9 @@ export async function getSessionDetail(deps: AgendaDeps, query: { id: string | n
   const [rules, found] = await Promise.all([deps.repository.getStudioRules(), deps.repository.getSession(query.id)])
   if (!found) return null
   const now = deps.clock.now()
-  return { timezone: rules.timezone, now: now.toISOString(), entry: toAgendaEntry(found, rules, now) }
+  // Only ask for private details when the user holds a booking; RLS decides anyway.
+  const privateDetails = found.myBookingId ? await deps.repository.getSessionPrivateDetails(found.session.id) : null
+  return { timezone: rules.timezone, now: now.toISOString(), entry: toAgendaEntry(found, rules, now), privateDetails }
 }
 
 async function buildAgenda(deps: AgendaDeps, query: AgendaQuery, rules: StudioRules): Promise<Agenda> {
@@ -175,6 +181,7 @@ export function toAgendaEntry(item: SessionAvailability, rules: StudioRules, now
     confirmedCount: item.confirmedCount,
     spotsLeft,
     state: sessionState(session, spotsLeft, rules, now),
+    myBookingId: item.myBookingId,
   }
 }
 

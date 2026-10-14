@@ -5,7 +5,7 @@ import { useId } from "react"
 import type { AgendaEntry } from "../../application"
 import { useBooking, useCopy } from "../booking-context"
 import { cx, formatTime } from "../format"
-import { ReserveCtaPlaceholder } from "../reserve-cta"
+import { ReserveAction } from "../reserve/reserve-action"
 import { ModalityIcon, StateBadge, availabilityText, useModalityLabel } from "../session-meta"
 
 export const SESSION_DETAIL_PATH = "/reservas/sesion/"
@@ -69,7 +69,7 @@ export function SessionCard({ entry, timezone }: { entry: AgendaEntry; timezone:
         </p>
       ) : null}
 
-      {entry.state === "available" ? <ReserveCtaPlaceholder describedBy={`${titleId} ${statusId}`} /> : null}
+      <ReserveAction entry={entry} timezone={timezone} describedBy={status ? `${titleId} ${statusId}` : titleId} />
     </article>
   )
 }

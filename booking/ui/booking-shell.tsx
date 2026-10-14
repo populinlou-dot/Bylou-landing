@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import type { ReactNode } from "react"
-import { useBooking, useCopy } from "./booking-context"
+import { useRouter } from "next/navigation"
+import { MY_BOOKINGS_PATH, SIGN_IN_PATH } from "../application"
+import { useAuthState, useBooking, useCopy, useReadyRuntime } from "./booking-context"
 import { DemoBanner } from "./demo-banner"
 import { BookingRuntimeGate } from "./runtime-gate"
 
@@ -28,6 +30,7 @@ export function BookingShell({ children }: { children: ReactNode }) {
               {brand.logo.wordmark}
             </span>
           </Link>
+          {runtime.status === "ready" ? <AccountNav /> : null}
         </div>
       </header>
       {runtime.status === "ready" && runtime.isDemo ? <DemoBanner /> : null}
@@ -35,5 +38,38 @@ export function BookingShell({ children }: { children: ReactNode }) {
         <BookingRuntimeGate>{children}</BookingRuntimeGate>
       </main>
     </>
+  )
+}
+
+/** "Mis reservas" + sign in/out. UX only: every request is re-checked by RLS/RPC. */
+function AccountNav() {
+  const t = useCopy()
+  const auth = useAuthState()
+  const { auth: authPort } = useReadyRuntime()
+  const router = useRouter()
+  const linkClass =
+    "inline-flex min-h-11 items-center rounded-full px-2 text-[14.5px] font-semibold text-primary underline-offset-4 hover:underline"
+  return (
+    <nav className="flex items-center gap-1 sm:gap-3">
+      <Link href={MY_BOOKINGS_PATH} className={linkClass}>
+        {t("mine.title")}
+      </Link>
+      {auth.status === "signed_in" ? (
+        <button
+          type="button"
+          className={linkClass}
+          onClick={async () => {
+            await authPort.signOut()
+            router.push("/reservas/")
+          }}
+        >
+          {t("auth.signOut")}
+        </button>
+      ) : auth.status === "signed_out" ? (
+        <Link href={SIGN_IN_PATH} className={linkClass}>
+          {t("auth.signIn")}
+        </Link>
+      ) : null}
+    </nav>
   )
 }

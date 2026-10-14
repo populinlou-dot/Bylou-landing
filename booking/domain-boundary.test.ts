@@ -97,6 +97,40 @@ describe.each(LAYERS)("$name boundary", ({ dir, rule, minFiles }) => {
   })
 })
 
+/**
+ * Phase 3: the Supabase SDK is an infrastructure detail. Only booking/infrastructure/supabase
+ * may import it; booking/ui, application, domain and the app/ composition root never do.
+ */
+describe("@supabase/* confinement", () => {
+  const SUPABASE_ADAPTER_DIR = join(INFRASTRUCTURE_DIR, "supabase")
+  const APP_DIR = join(ROOT_DIR, "app")
+  const SELF = fileURLToPath(import.meta.url) // its self-check fixtures mention @supabase on purpose
+  const scanned = [BOOKING_DIR, BRANDS_DIR, APP_DIR].flatMap(listTsFiles).filter((file) => file !== SELF)
+
+  it("scans the adapter and the UI", () => {
+    expect(scanned.some((file) => isInside(file, SUPABASE_ADAPTER_DIR))).toBe(true)
+    expect(scanned.some((file) => isInside(file, UI_DIR))).toBe(true)
+  })
+
+  it("imports @supabase/* only from booking/infrastructure/supabase", () => {
+    const offenders = scanned.flatMap((file) =>
+      importSpecifiers(readFileSync(file, "utf8"))
+        .filter((spec) => spec.startsWith("@supabase/") && !isInside(file, SUPABASE_ADAPTER_DIR))
+        .map((spec) => `${relative(ROOT_DIR, file)} -> ${spec}`),
+    )
+    expect(offenders).toEqual([])
+  })
+
+  it("never references a privileged key in shipped source", () => {
+    const privileged = new RegExp(["service", "role"].join("_"), "i")
+    const offenders = scanned
+      .filter((file) => !isTestFile(file))
+      .filter((file) => privileged.test(readFileSync(file, "utf8")))
+      .map((file) => relative(ROOT_DIR, file))
+    expect(offenders).toEqual([])
+  })
+})
+
 describe("boundary scanner self-checks", () => {
   const domainRule = LAYERS[0].rule
   const applicationRule = LAYERS[1].rule

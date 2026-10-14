@@ -28,7 +28,15 @@ function compose(): { brand: BrandConfig; runtime: BookingRuntime } {
   const { brand } = brandResolution
   return {
     brand,
-    runtime: createBookingRuntime(process.env.NEXT_PUBLIC_BOOKING_DATA_SOURCE, { rules: brand.rules, mockLatencyMs: 250 }),
+    runtime: createBookingRuntime(process.env.NEXT_PUBLIC_BOOKING_DATA_SOURCE, {
+      rules: brand.rules,
+      mockLatencyMs: 250,
+      // Public values only (anon/publishable key); written literally so Next inlines them at build.
+      supabase: {
+        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      },
+    }),
   }
 }
 

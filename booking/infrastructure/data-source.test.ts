@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_STUDIO_RULES } from "../config"
 import { createBookingRuntime, resolveDataSource } from "./data-source"
-import { MockBookingRepository } from "./mock"
+import { MockAuth, MockBookingRepository } from "./mock"
+import { SupabaseAuth, SupabaseBookingRepository } from "./supabase"
 
 const options = { rules: DEFAULT_STUDIO_RULES }
 
@@ -43,7 +44,61 @@ describe("createBookingRuntime", () => {
     expect(runtime.clock.now()).toBeInstanceOf(Date)
   })
 
-  it("reports supabase as not available yet instead of using another adapter", () => {
-    expect(createBookingRuntime("supabase", options)).toEqual({ status: "unavailable", source: "supabase" })
+  it("wires the mock auth with the mock repository", () => {
+    const runtime = createBookingRuntime("mock", options)
+    expect(runtime.status === "ready" && runtime.auth).toBeInstanceOf(MockAuth)
+  })
+})
+
+// Fake, locally built tokens: header.payload.signature with the given role claim.
+const jwtWithRole = (role: string) =>
+  ["e30", btoa(JSON.stringify({ role })).replace(/=+$/, ""), "sig"].join(".")
+const ANON_KEY = jwtWithRole("anon")
+const LOCAL_URL = "http://127.0.0.1:54321"
+
+describe("createBookingRuntime — supabase (ADR-013: never falls back to mock)", () => {
+  it("builds Supabase adapters when URL and anon key are present", () => {
+    const runtime = createBookingRuntime("supabase", { ...options, supabase: { url: LOCAL_URL, anonKey: ANON_KEY } })
+    expect(runtime.status).toBe("ready")
+    if (runtime.status !== "ready") return
+    expect(runtime.isDemo).toBe(false)
+    expect(runtime.repository).toBeInstanceOf(SupabaseBookingRepository)
+    expect(runtime.auth).toBeInstanceOf(SupabaseAuth)
+  })
+
+  it("accepts new-style publishable keys", () => {
+    const runtime = createBookingRuntime("supabase", {
+      ...options,
+      supabase: { url: LOCAL_URL, anonKey: "sb_publishable_example" },
+    })
+    expect(runtime.status).toBe("ready")
+  })
+
+  it.each([
+    [{}, "missing", "NEXT_PUBLIC_SUPABASE_URL", null],
+    [{ url: "  " , anonKey: ANON_KEY }, "missing", "NEXT_PUBLIC_SUPABASE_URL", null],
+    [{ url: "not a url", anonKey: ANON_KEY }, "invalid", "NEXT_PUBLIC_SUPABASE_URL", "not a url"],
+    [{ url: "ftp://example.test", anonKey: ANON_KEY }, "invalid", "NEXT_PUBLIC_SUPABASE_URL", "ftp://example.test"],
+    [{ url: LOCAL_URL }, "missing", "NEXT_PUBLIC_SUPABASE_ANON_KEY", null],
+  ] as const)("returns a config error for %j", (supabase, reason, variable, received) => {
+    expect(createBookingRuntime("supabase", { ...options, supabase })).toEqual({
+      status: "config_error",
+      reason,
+      variable,
+      received,
+    })
+  })
+
+  it.each([
+    ["a secret key", "sb_secret_example"],
+    ["a privileged JWT", jwtWithRole("service" + "_role")],
+    ["an authenticated-user JWT", jwtWithRole("authenticated")],
+  ])("refuses %s as the browser key and never echoes it", (_label, anonKey) => {
+    expect(createBookingRuntime("supabase", { ...options, supabase: { url: LOCAL_URL, anonKey } })).toEqual({
+      status: "config_error",
+      reason: "invalid",
+      variable: "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      received: null,
+    })
   })
 })

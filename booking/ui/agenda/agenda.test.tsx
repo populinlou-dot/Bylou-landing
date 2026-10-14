@@ -3,10 +3,13 @@ import type { ReactNode } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { bylouBrand } from "../../../brands/bylou"
 import type { BookingRepository, BookingRuntime } from "../../application"
-import { availabilityAt, fakeRepository, fixedClock } from "../../application/test-support"
+import { availabilityAt, fakeAuth, fakeRepository, fixedClock } from "../../application/test-support"
 import { BookingProvider } from "../booking-context"
 import { BookingShell } from "../booking-shell"
 import { AgendaContainer } from "./agenda-container"
+
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => router, useSearchParams: () => new URLSearchParams() }))
 
 // Wednesday 2026-10-14 12:00 Buenos Aires; the week shown is Mon 12 → Sun 18 October.
 const clock = fixedClock("2026-10-14T15:00:00.000Z")
@@ -25,7 +28,13 @@ function renderWith(runtime: BookingRuntime, children: ReactNode = <AgendaContai
   )
 }
 
-const ready = (repository: BookingRepository): BookingRuntime => ({ status: "ready", repository, clock, isDemo: true })
+const ready = (repository: BookingRepository): BookingRuntime => ({
+  status: "ready",
+  repository,
+  clock,
+  isDemo: true,
+  auth: fakeAuth(null),
+})
 
 afterEach(() => {
   cleanup()
@@ -55,21 +64,28 @@ describe("AgendaContainer", () => {
     expect(within(fullCard!).queryByRole("button", { name: "Reservar" })).toBeNull()
   })
 
-  it("shows an honest, non-functional 'Reservar' on available sessions", async () => {
+  it("shows a real 'Reservar' on available sessions that sends signed-out users to sign in", async () => {
+    router.push.mockClear()
     renderWith(ready(fakeRepository(SESSIONS)))
     const buttons = await screen.findAllByRole("button", { name: "Reservar" })
     expect(buttons).toHaveLength(2)
     for (const button of buttons) {
-      expect(button.getAttribute("aria-disabled")).toBe("true")
+      expect(button.getAttribute("aria-disabled")).toBeNull()
       const describedBy = button.getAttribute("aria-describedby") ?? ""
       const note = describedBy
         .split(" ")
         .map((id) => document.getElementById(id)?.textContent)
         .join(" ")
-      expect(note).toContain("Las reservas online se habilitan pronto.")
+      expect(note).toMatch(/Queda|Quedan/)
     }
+    expect(screen.queryByText("Las reservas online se habilitan pronto.")).toBeNull()
     expect(screen.getByText("Queda 1 lugar")).toBeTruthy()
     expect(screen.getByText("Quedan 2 lugares")).toBeTruthy()
+
+    fireEvent.click(buttons[0])
+    expect(router.push).toHaveBeenCalledWith(
+      `/reservas/ingresar/?returnTo=${encodeURIComponent("/reservas/sesion/?id=individual-free&reservar=1")}`,
+    )
   })
 
   it("shows the empty-week state", async () => {

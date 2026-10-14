@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 3.1 — Local DB (migrations + SQL tests on Supabase local)** in progress. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 3.2 — Supabase adapter + email-OTP + real book/cancel (LOCAL stack)** in progress. Phase 3.1 done (`57424f5`, `407197d`). Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -13,8 +13,10 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | Data model + RLS + RPC design | backend-security | `DATA_MODEL.md` | done (`b23205d`; SQL not executed yet — no Supabase project) |
 | Domain + theme contract + tests | domain/frontend engineer | `booking/`, `brands/`, `vitest.config.mts` | done (`13c9c92`, 70 tests green, verified by orchestrator) |
 | **Phase 2.1** read-only agenda (mock) | frontend engineer | `booking/application`, `booking/infrastructure/mock`, `booking/ui`, `app/reservas/` | done (`157bcc7`; 141 tests; orchestrator browser-checked static build: agenda, deep-link refresh of `/reservas/sesion/?id=`, invalid id, landing intact) |
-| Docs reconciliation | writer | PRD/ARCHITECTURE/ROADMAP/DATA_MODEL/UX_DESIGN | running |
-| **Phase 3.1** local migrations + pgTAP + race tests | backend-security | `supabase/**`, db test harness | running (local only; Supabase CLI via brew; no remote link) |
+| Docs reconciliation | writer | PRD/ARCHITECTURE/ROADMAP/DATA_MODEL/UX_DESIGN | done (`a203b8c`) |
+| **Phase 3.1** local migrations + pgTAP + race tests | backend-security | `supabase/**`, `tests/db/` | done (`57424f5`; orchestrator re-ran: pgTAP 182/182, races 6/6, unit 141/141; no secrets) |
+| Security review of migrations | qa / review-risk (read-only) | report → fixes | running |
+| **Phase 3.2** adapter + OTP + book/cancel UI (local) | frontend engineer | `booking/**`, `app/reservas/**`, `.env.example` | running |
 
 Phase 0 workstreams:
 
@@ -71,7 +73,19 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 
 ## Next step
 
-Finish Phase 3.1 (local DB green) → commit → Phase 3.2: Supabase adapter + email-OTP auth + real book/cancel wired against **local** Supabase. Hosted Supabase project (3.5) is owner-gated.
+Finish Phase 3.2 + apply security-review fixes → then Phase 4 (admin UI, waitlist, credit expiry). Hosted Supabase project (3.5) is owner-gated.
+
+## Local database (Phase 3.1+)
+
+Requires Docker + Supabase CLI (`brew install supabase/tap/supabase`). Local only — never `supabase link`/`db push` without owner approval.
+
+```
+npx pnpm@9 run db:start        # start local stack (studio/storage/realtime disabled)
+supabase db reset              # re-apply migrations + fake seed
+supabase test db               # pgTAP (182 assertions)
+npx pnpm@9 run test:db         # multi-connection race tests
+npx pnpm@9 run db:stop
+```
 
 ## Local preview
 

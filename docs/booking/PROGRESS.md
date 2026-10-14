@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 3.3 — DB hardening + hosted setup guide** in progress. Phase 3.1 done (`57424f5`, `407197d`); Phase 3.2 done (`a810ab7`). Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 3 (local) — DONE.** Next: Phase 4 (admin UI + waitlist + credit expiry). Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -17,8 +17,9 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | **Phase 3.1** local migrations + pgTAP + race tests | backend-security | `supabase/**`, `tests/db/` | done (`57424f5`; orchestrator re-ran: pgTAP 182/182, races 6/6, unit 141/141; no secrets) |
 | Security review of migrations | qa / review-risk (read-only) | report | done: 0 blocker / 0 high / 1 medium / 2 low / 5 info |
 | **Phase 3.2** adapter + OTP + book/cancel UI (local) | frontend engineer | `booking/**`, `app/reservas/**` | done (`a810ab7`; 256 tests; E2E vs local Supabase scripted: book, replay, full, refund, late-cancel denied) |
-| **Phase 3.3** DB hardening (OTP email template w/ code, confirmations on, confirmed-only profile email, unpublished class types, hide `updated_by`) | backend-security | `supabase/**` | running |
-| Hosted Supabase setup guide (owner approved 2026-10-14) | devops writer | `SUPABASE_SETUP.md` | running |
+| **Phase 3.3** DB hardening (OTP email template w/ code, confirmations on, confirmed-only profile email, unpublished class types, hide `updated_by`) | backend-security | `supabase/**` | done (`6374543`; pgTAP 216/216) |
+| Hosted Supabase setup guide (owner approved 2026-10-14) | devops writer | `SUPABASE_SETUP.md` | done (`f498e7a`) — **owner action pending** |
+| Browser E2E vs local Supabase (orchestrator, 2026-10-14) | orchestrator | — | PASS: request code → Mailpit → sign in → book (9→8) → address revealed → cancel >24 h → refund (8→9), history updated |
 
 Phase 0 workstreams:
 
@@ -63,6 +64,13 @@ Carried over from a previous local setup session; intentionally left uncommitted
 - (in progress, docs agent) route naming `/reservas/sesion/`, `listSessions`, past/cancelled sessions listed, Bylou deny policy across docs.
 - Add RPC-only codes from `DATA_MODEL.md` §13 (`capacity_below_bookings`, `attendance_window_closed`, `session_not_full`) to the result-code contract (application layer, not domain) + copy keys; reflect `p_accept_late` in ARCHITECTURE `cancel(cmd)`.
 
+## UX backlog (observed in browser E2E)
+
+- Agenda card for a past session the student attended says "Ya tenés esta clase reservada"; should read as attended/past.
+- After booking from the agenda, the card behind the sheet still shows the old spots count until refresh.
+- Modality filter + remembered filter (PRD ST-01 AC4) pending.
+- New users have no display name yet (profile completion step).
+
 ## Pre-release checklist (from security review, not yet done)
 
 - [ ] CAPTCHA (Turnstile) on sign-in: needs site key + frontend change.
@@ -84,7 +92,10 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 
 ## Next step
 
-Finish Phase 3.2 + apply security-review fixes → then Phase 4 (admin UI, waitlist, credit expiry). Hosted Supabase project (3.5) is owner-gated.
+1. **Owner:** follow `docs/booking/SUPABASE_SETUP.md`; send back only the project ref + checklist (never keys).
+2. **Phase 4.1** admin UI at `/admin/` (staff-only via RPC/RLS): sessions list/create/cancel, roster + attendance, grant credits; add deferred RPCs `admin_update_session`, `admin_upsert_class_type`, `admin_adjust_credits`, `admin_update_settings`. Escape `display_name`.
+3. **Phase 4.2** waitlist (FIFO, Bylou deny policy) + credit-expiry job (pg_cron) — needs owner answer on auto-promotion.
+4. Fix UX backlog items above.
 
 ## Local database (Phase 3.1+)
 
@@ -109,6 +120,6 @@ npx pnpm@9 test                                                    # unit + comp
 ## How to resume
 
 ```
-Read docs/booking/PROGRESS.md and INITIAL_PROMPT_BYLOU_BOOKING.md, then continue from "Next step" on branch feature/booking-core.
+Read docs/booking/PROGRESS.md and INITIAL_PROMPT_BYLOU_BOOKING.md, then continue from "Next step" on branch feature/booking-core (start Phase 4.1 admin UI unless the owner has finished SUPABASE_SETUP.md, in which case first link + push migrations with explicit approval).
 Use `npx pnpm@9` for every package command (CI uses pnpm 9).
 ```

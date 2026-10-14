@@ -77,14 +77,14 @@ The `domain` purity rule is enforced by an automated test that scans imports (ES
 - Aligning local vs CI pnpm (adding a `packageManager` field / bumping CI) changes the deploy pipeline → **Proposed**, owner decision.
 
 ## ADR-011 — Default business rules (configurable per studio)
-**Proposed — provisional defaults until the owner confirms.**
+**Accepted (cancellation) — owner decision 2026-10-13 for Bylou:** free cancellation up to **24 h** before start; after that the app **blocks** cancellation (`lateCancelPolicy: "deny"`) and the student must contact Lou. Other rows remain provisional platform defaults.
 
 | Rule | Default | Config key |
 |---|---|---|
 | Timezone | `America/Argentina/Buenos_Aires` | `rules.timezone` |
 | Booking opens / closes | opens 30 days before, closes 0 min before start | `rules.bookingWindow` |
 | Free cancellation | up to **24 h** before start → credit refunded | `rules.cancellationWindowHours` |
-| Late cancellation | allowed; credit **not** refunded | `rules.lateCancelPolicy` |
+| Late cancellation | platform default `allow_without_refund`; **Bylou: `deny`** (contact the studio) | `rules.lateCancelPolicy` |
 | One booking per student per session | always (an invariant, not config) | — |
 | Credit consumption | 1 credit per booking, earliest-expiring grant first | `rules.creditsPerBooking` |
 | Waitlist (Phase 4) | FIFO; auto-promote only if the student has a valid credit and promotion happens before the cancellation window; otherwise skip to the next student | `features.waitlist` |
@@ -103,4 +103,4 @@ The `domain` purity rule is enforced by an automated test that scans imports (ES
 **Accepted.**
 - `studio_settings` in Postgres is the enforcement source for RPCs.
 - `brands/*` rules are defaults for the seed data and the mock adapter, so the UI preview and the DB stay aligned by construction.
-- Late cancellation follows `lateCancelPolicy`. Bylou default: `allow_without_refund`, which needs a `cancel.late` copy key. The confirmation-email copy stays hidden until emails exist (V2).
+- Late cancellation follows `lateCancelPolicy`. Bylou: `deny` (see ADR-011), so the `cancel.closed` copy (contact Lou) applies; `cancel.late` is only needed for studios using `allow_without_refund`. The confirmation-email copy stays hidden until emails exist (V2).

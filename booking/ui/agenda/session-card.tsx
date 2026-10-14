@@ -6,7 +6,7 @@ import type { AgendaEntry } from "../../application"
 import { useBooking, useCopy } from "../booking-context"
 import { cx, formatTime } from "../format"
 import { ReserveAction } from "../reserve/reserve-action"
-import { ModalityIcon, StateBadge, availabilityText, useModalityLabel } from "../session-meta"
+import { ModalityIcon, StateBadge, statusText, useModalityLabel } from "../session-meta"
 
 export const SESSION_DETAIL_PATH = "/reservas/sesion/"
 
@@ -18,7 +18,7 @@ export function SessionCard({ entry, timezone }: { entry: AgendaEntry; timezone:
   const statusId = useId()
   const { session } = entry
   const inactive = entry.state === "past" || entry.state === "cancelled"
-  const status = availabilityText(entry, t)
+  const status = statusText(entry, t)
 
   return (
     <article

@@ -1,5 +1,5 @@
 /** Test helpers for application use cases (no test-runner imports, no adapters). */
-import type { Session, StudioRules } from "../domain"
+import type { Attendance, Modality, Session, StudioRules } from "../domain"
 import type {
   AdminClassTypeView,
   AdminGrantView,
@@ -38,7 +38,18 @@ export const CLASS_TYPES: ClassTypeView[] = [
 
 export function availabilityAt(
   startsAt: string,
-  overrides: { id?: string; classTypeId?: string; capacity?: number; confirmed?: number; status?: Session["status"]; minutes?: number } = {},
+  overrides: {
+    id?: string
+    classTypeId?: string
+    capacity?: number
+    confirmed?: number
+    status?: Session["status"]
+    minutes?: number
+    modality?: Modality
+    /** The current user's confirmed booking of this session. */
+    myBookingId?: string
+    myAttendance?: Attendance
+  } = {},
 ): SessionAvailability {
   const classTypeId = overrides.classTypeId ?? "ct-grupal"
   const classType = CLASS_TYPES.find((ct) => ct.id === classTypeId) ?? CLASS_TYPES[1]
@@ -50,13 +61,14 @@ export function availabilityAt(
       startsAt,
       endsAt: new Date(Date.parse(startsAt) + minutes * 60_000).toISOString(),
       capacity: overrides.capacity ?? 8,
-      modality: "online",
+      modality: overrides.modality ?? "online",
       status: overrides.status ?? "scheduled",
     },
     classType,
     confirmedCount: overrides.confirmed ?? 0,
     instructorName: "Lou",
-    myBookingId: null,
+    myBookingId: overrides.myBookingId ?? null,
+    myAttendance: overrides.myBookingId ? (overrides.myAttendance ?? "unknown") : null,
     myWaitlistPosition: null,
   }
 }
@@ -83,6 +95,8 @@ export interface FakeRepositoryOptions {
   myBookings?: MyBooking[]
   balance?: CreditBalance
   privateDetails?: Record<string, SessionPrivateDetails>
+  /** `profiles.display_name` of the signed-in user (default "Alumna"). */
+  displayName?: string | null
 }
 
 /**
@@ -132,6 +146,14 @@ export function fakeRepository(
     async cancel(cmd) {
       calls.push(`cancel ${cmd.bookingId} ${cmd.idempotencyKey}`)
       return { ok: true, bookingId: cmd.bookingId, status: "cancelled", refunded: true, replayed: false }
+    },
+    async getMyProfile() {
+      calls.push("getMyProfile")
+      return { displayName: options.displayName === undefined ? "Alumna" : options.displayName }
+    },
+    async updateMyDisplayName(displayName) {
+      calls.push(`updateMyDisplayName ${displayName}`)
+      return { ok: true, displayName }
     },
   }
 }

@@ -73,10 +73,13 @@ Carried over from a previous local setup session; intentionally left uncommitted
 - ~~Sign-in: email typed right after page load is sometimes wiped; `useId` hydration mismatch~~ → fixed in 4.3 (auth state update in a transition + adopt pre-hydration input; regression test `sign-in-hydration.test.tsx`).
 - ~~Admin new-session form: modality radios named `in_person`/`online`~~ → fixed in 4.3 (`RadioGroupField`, aria-labelledby on the visible text).
 - ~~Flaky sign-in focus test~~ → focus moves in a layout effect (4.3).
-- Agenda card for a past session the student attended says "Ya tenés esta clase reservada"; should read as attended/past.
-- After booking from the agenda, the card behind the sheet still shows the old spots count until refresh.
-- Modality filter + remembered filter (PRD ST-01 AC4) pending.
-- New users have no display name yet (profile completion step).
+- ~~Agenda card for a past session the student attended says "Ya tenés esta clase reservada"~~ → fixed: the application layer decides `entry.action` / `entry.myOutcome` in the domain order (cancelled → started → already booked → window → full); past cards read "Finalizada" + Asististe / No asististe / Reservada. Root cause: `ReserveAction` checked `myBookingId` before the session state. `SessionAvailability` now carries `myAttendance`.
+- ~~After booking from the agenda, the card behind the sheet still shows the old spots count until refresh~~ → fixed: a successful booking re-reads that session from the repository right away (`getAgendaEntry` + `replaceAgendaEntry`; silent week reload as fallback). Cancel lives only in Mis reservas, which already re-reads after success (now tested).
+- ~~Modality filter + remembered filter (PRD ST-01 AC4)~~ → shipped: Todas / Presencial / Online chips next to the practice chips; both filters remembered per device in `localStorage` (try/catch, page works when storage throws; stale practice falls back to "Todas").
+- ~~New users have no display name yet~~ → optional "¿Cómo te llamamos?" step after verifying the code when `profiles.display_name` is empty (save / "Ahora no"). No migration: the existing column grant `update (display_name, phone)` + `profiles_update_own` RLS already allow it (pgTAP E5 extended). Client validation: trim, 1–80 chars, no control/bidi characters. The mock demo student already has a name, so the step does not appear in the mock demo.
+
+- A full session the student has booked shows both "Esta clase está completa." and "Ya tenés esta clase reservada."; hide the full note when booked.
+- Profile step: name is optional and phone is not collected (PRD ST-03 AC2 says required name + phone). Owner to confirm.
 
 ## Pre-release checklist (from security review, not yet done)
 
@@ -114,7 +117,7 @@ Requires Docker + Supabase CLI (`brew install supabase/tap/supabase`). Local onl
 ```
 npx pnpm@9 run db:start        # start local stack (studio/storage/realtime disabled)
 supabase db reset              # re-apply migrations + fake seed
-supabase test db               # pgTAP (182 assertions)
+supabase test db               # pgTAP (400 assertions)
 npx pnpm@9 run test:db         # multi-connection race tests
 npx pnpm@9 run db:stop
 ```

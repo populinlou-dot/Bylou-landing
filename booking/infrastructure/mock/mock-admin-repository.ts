@@ -128,7 +128,7 @@ export class MockAdminRepository implements AdminRepository {
       .map((b) => ({
         bookingId: b.id,
         userId: b.userId,
-        ...demoProfile(b.userId),
+        ...this.profileOf(b.userId),
         status: b.status,
         attendance: b.attendance,
         bookedAt: b.createdAt,
@@ -601,7 +601,7 @@ export class MockAdminRepository implements AdminRepository {
       .sort((a, b) => toEpochMs(a.session.startsAt) - toEpochMs(b.session.startsAt))[0]
     return {
       userId,
-      ...demoProfile(userId),
+      ...this.profileOf(userId),
       balance: creditBalance(own, now),
       nextExpiry: active[0]?.expiresAt ?? null,
       nextBooking: next
@@ -617,6 +617,12 @@ export class MockAdminRepository implements AdminRepository {
 
   private state() {
     return this.options.store.sharedState()
+  }
+
+  /** Demo profile, with any name the student saved through the profile step (shared state). */
+  private profileOf(userId: string): { displayName: string | null; email: string | null } {
+    const saved = this.state().displayNames[userId]
+    return saved === undefined ? demoProfile(userId) : { ...demoProfile(userId), displayName: saved }
   }
 
   /** Write-side auth mirror: anonymous → unauthenticated, students → forbidden. */

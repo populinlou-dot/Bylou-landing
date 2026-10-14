@@ -4,6 +4,7 @@
  * credit balance and the auth port. All instants are UTC ISO-8601 strings.
  */
 import type {
+  Attendance,
   Booking,
   BookingRejectionCode,
   CancellationCode,
@@ -44,6 +45,8 @@ export interface SessionAvailability {
   instructorName: string | null
   /** Current user's active (confirmed) booking id; null when signed out or not booked. */
   myBookingId: string | null
+  /** Attendance recorded on that booking; null exactly when `myBookingId` is null. */
+  myAttendance: Attendance | null
   /** Phase 4. */
   myWaitlistPosition: number | null
 }
@@ -127,6 +130,14 @@ export class RepositoryError extends Error {
   }
 }
 
+/** The signed-in user's own profile (RLS: a student reads and updates only her own row). */
+export interface MyProfile {
+  /** `profiles.display_name`; null until the student sets one. User-provided: plain text only. */
+  displayName: string | null
+}
+
+export type UpdateProfileResult = { ok: true; displayName: string } | { ok: false; code: TransportCode }
+
 export interface BookingRepository {
   getStudioRules(): Promise<StudioRules>
   listClassTypes(): Promise<ClassTypeView[]>
@@ -141,6 +152,10 @@ export interface BookingRepository {
   /** Business refusals come back as data; never throws for expected failures. */
   book(cmd: BookCommand): Promise<BookResult>
   cancel(cmd: CancelCommand): Promise<CancelResult>
+  /** Throws RepositoryError("unauthenticated") when signed out. */
+  getMyProfile(): Promise<MyProfile>
+  /** Expects an already validated name (see `validateDisplayName`); refusals come back as data. */
+  updateMyDisplayName(displayName: string): Promise<UpdateProfileResult>
 }
 
 export interface AuthUser {

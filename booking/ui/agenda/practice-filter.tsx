@@ -1,30 +1,33 @@
 "use client"
 
 import { Check } from "lucide-react"
-import type { ClassTypeView } from "../../application"
+import { MODALITIES, type ClassTypeView } from "../../application"
+import type { Modality } from "../../domain"
 import { useCopy } from "../booking-context"
 import { cx } from "../format"
 
+interface ChipOption<T extends string> {
+  id: T | null
+  label: string
+}
+
 /**
- * Practice chips (UX_DESIGN §2.2). Toggle buttons with `aria-pressed`; the selected chip
+ * Filter chips (UX_DESIGN §2.2). Toggle buttons with `aria-pressed`; the selected chip
  * differs by fill AND a check icon, never by color alone.
  */
-export function PracticeFilter({
-  classTypes,
+function FilterChips<T extends string>({
+  label,
+  options,
   selectedId,
   onSelect,
 }: {
-  classTypes: ClassTypeView[]
-  selectedId: string | null
-  onSelect: (id: string | null) => void
+  label: string
+  options: ChipOption<T>[]
+  selectedId: T | null
+  onSelect: (id: T | null) => void
 }) {
-  const t = useCopy()
-  const options: Array<{ id: string | null; label: string }> = [
-    { id: null, label: t("filter.all") },
-    ...classTypes.map((ct) => ({ id: ct.id, label: ct.name })),
-  ]
   return (
-    <div role="group" aria-label={t("agenda.filter")} className="flex flex-wrap gap-2">
+    <div role="group" aria-label={label} className="flex flex-wrap gap-2">
       {options.map((option) => {
         const pressed = option.id === selectedId
         return (
@@ -47,4 +50,40 @@ export function PracticeFilter({
       })}
     </div>
   )
+}
+
+export function PracticeFilter({
+  classTypes,
+  selectedId,
+  onSelect,
+}: {
+  classTypes: ClassTypeView[]
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+}) {
+  const t = useCopy()
+  const options: ChipOption<string>[] = [
+    { id: null, label: t("filter.all") },
+    ...classTypes.map((ct) => ({ id: ct.id, label: ct.name })),
+  ]
+  return <FilterChips label={t("agenda.filter")} options={options} selectedId={selectedId} onSelect={onSelect} />
+}
+
+/** Todas / Presencial / Online (PRD ST-01 AC4). */
+export function ModalityFilter({
+  selected,
+  onSelect,
+}: {
+  selected: Modality | null
+  onSelect: (modality: Modality | null) => void
+}) {
+  const t = useCopy()
+  const options: ChipOption<Modality>[] = [
+    { id: null, label: t("filter.all") },
+    ...MODALITIES.map((modality) => ({
+      id: modality,
+      label: modality === "online" ? t("filter.modality.online") : t("filter.modality.inPerson"),
+    })),
+  ]
+  return <FilterChips label={t("agenda.filter.modality")} options={options} selectedId={selected} onSelect={onSelect} />
 }

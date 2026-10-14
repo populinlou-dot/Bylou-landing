@@ -8,7 +8,7 @@ import { useBooking, useCopy } from "../booking-context"
 import { formatDayHeading, formatTime } from "../format"
 import { DisplayTitle, Eyebrow, SkeletonBlock, StatusPanel, buttonClass } from "../primitives"
 import { ReserveAction } from "../reserve/reserve-action"
-import { ModalityIcon, StateBadge, availabilityText, useModalityLabel } from "../session-meta"
+import { ModalityIcon, StateBadge, statusText, useModalityLabel } from "../session-meta"
 
 export const AGENDA_PATH = "/reservas/"
 
@@ -100,7 +100,7 @@ function SessionDetailContent({ detail, reopenSheet }: { detail: SessionDetail; 
   const statusId = useId()
   const { entry, timezone } = detail
   const { session } = entry
-  const status = availabilityText(entry, t)
+  const status = statusText(entry, t)
 
   return (
     <article className="flex flex-col gap-6" aria-labelledby="session-title">

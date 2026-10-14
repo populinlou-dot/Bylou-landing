@@ -1,7 +1,7 @@
 "use client"
 
 import { MapPin, MonitorPlay } from "lucide-react"
-import type { AgendaEntry, SessionState } from "../application"
+import type { AgendaEntry, MyOutcome, SessionState } from "../application"
 import type { Modality } from "../domain"
 import { useBooking, useCopy, type Translate } from "./booking-context"
 import { Badge, type BadgeTone } from "./primitives"
@@ -54,6 +54,23 @@ export function availabilityText(entry: AgendaEntry, t: Translate): string | nul
     case "closed":
       return t("reason.booking_closed")
   }
+}
+
+/** The student's own booking of a started/ended session: Asististe / No asististe / Reservada. */
+export function outcomeText(outcome: MyOutcome, t: Translate): string {
+  switch (outcome) {
+    case "attended":
+      return t("history.attended")
+    case "absent":
+      return t("history.absent")
+    case "booked":
+      return t("session.booked")
+  }
+}
+
+/** One sentence under the card title: the student's outcome when there is one, else availability. */
+export function statusText(entry: AgendaEntry, t: Translate): string | null {
+  return entry.myOutcome ? outcomeText(entry.myOutcome, t) : availabilityText(entry, t)
 }
 
 export function StateBadge({ state }: { state: SessionState }) {

@@ -87,4 +87,28 @@ describe("MockBookingRepository", () => {
     const repository = new MockBookingRepository({ clock: clockAt(NOW), rules })
     expect(await repository.getStudioRules()).toEqual(rules)
   })
+
+  it("reports the demo student's attendance on her past booking (agenda reads it as past + attended)", async () => {
+    const repository = new MockBookingRepository({ clock: clockAt(NOW), rules: DEFAULT_STUDIO_RULES, currentUserId: () => "demo-alumna" })
+    const mine = (await repository.listSessions(WIDE)).filter((s) => s.myBookingId)
+    expect(mine).toHaveLength(1)
+    expect(mine[0]).toMatchObject({ myBookingId: "demo-booking-history", myAttendance: "attended" })
+    const anonymous = await repoAt(NOW).listSessions(WIDE)
+    expect(anonymous.every((s) => s.myBookingId === null && s.myAttendance === null)).toBe(true)
+  })
+
+  it("profile: signed out throws/refuses; signed in reads and updates only her own name", async () => {
+    let user: string | null = null
+    const repository = new MockBookingRepository({ clock: clockAt(NOW), rules: DEFAULT_STUDIO_RULES, currentUserId: () => user })
+    await expect(repository.getMyProfile()).rejects.toMatchObject({ code: "unauthenticated" })
+    expect(await repository.updateMyDisplayName("Ana")).toEqual({ ok: false, code: "unauthenticated" })
+
+    user = "demo-user-99"
+    expect(await repository.getMyProfile()).toEqual({ displayName: null })
+    expect(await repository.updateMyDisplayName("a".repeat(81))).toEqual({ ok: false, code: "invalid_input" })
+    expect(await repository.updateMyDisplayName("Ana")).toEqual({ ok: true, displayName: "Ana" })
+    expect(await repository.getMyProfile()).toEqual({ displayName: "Ana" })
+    user = "demo-alumna"
+    expect(await repository.getMyProfile()).toEqual({ displayName: "Alumna demo" })
+  })
 })

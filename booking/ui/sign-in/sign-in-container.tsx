@@ -1,20 +1,22 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
-import { sanitizeReturnTo, type AuthCode } from "../../application"
+import { useEffect, useRef, useState } from "react"
+import { needsDisplayName, sanitizeReturnTo, saveDisplayName, type AuthCode } from "../../application"
 import { useAuthState, useCopy, useReadyRuntime } from "../booking-context"
+import { ProfileNameView, type ProfileNameError } from "./profile-name-view"
 import { SignInView, type SignInStep } from "./sign-in-view"
 
 /** Supabase's default minimum between OTP emails is 60 s; the button mirrors it. */
 export const RESEND_COOLDOWN_SECONDS = 60
 
 export function SignInContainer({ returnTo }: { returnTo: string }) {
-  const { auth } = useReadyRuntime()
+  const { auth, repository } = useReadyRuntime()
   const authState = useAuthState()
   const router = useRouter()
   const t = useCopy()
-  const [step, setStep] = useState<SignInStep>("email")
+  /** "name" = optional profile step right after verifying the code (no display name yet). */
+  const [step, setStep] = useState<SignInStep | "name">("email")
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
   const [pending, setPending] = useState(false)
@@ -22,10 +24,14 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
   const [cooldown, setCooldown] = useState(0)
   const [demoCode, setDemoCode] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [name, setName] = useState("")
+  const [nameError, setNameError] = useState<ProfileNameError | null>(null)
+  // Set while verify() owns the navigation (it may show the profile step before leaving).
+  const verifying = useRef(false)
 
-  // Already signed in (or just verified): continue to the validated destination.
+  // Already signed in when arriving: continue to the validated destination.
   useEffect(() => {
-    if (authState.status === "signed_in") router.replace(returnTo)
+    if (authState.status === "signed_in" && !verifying.current) router.replace(returnTo)
   }, [authState.status, returnTo, router])
 
   useEffect(() => {
@@ -55,14 +61,55 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
     setPending(true)
     setError(null)
     setNotice(null)
+    verifying.current = true
     const result = await auth.verifyCode(email, code)
     if (!result.ok) {
+      verifying.current = false
       setPending(false)
       setError(result.code)
       return
     }
+    // First sign-in without a name: offer the optional step (a failed check just skips it).
+    if (await needsDisplayName({ repository })) {
+      setPending(false)
+      setStep("name")
+      return
+    }
     // Keep the button busy while navigating to the validated destination.
     router.replace(returnTo)
+  }
+
+  async function saveName() {
+    setPending(true)
+    setNameError(null)
+    const result = await saveDisplayName({ repository }, name)
+    if (result.ok) {
+      router.replace(returnTo)
+      return
+    }
+    setPending(false)
+    if (result.code === "empty" || result.code === "too_long" || result.code === "invalid_chars") {
+      setNameError(result.code)
+      return
+    }
+    console.error("[booking] display name save failed", result.code)
+    setNameError("save")
+  }
+
+  if (step === "name") {
+    return (
+      <ProfileNameView
+        name={name}
+        pending={pending}
+        error={nameError}
+        onNameChange={(value) => {
+          setName(value)
+          if (nameError) setNameError(null)
+        }}
+        onSubmit={() => void saveName()}
+        onSkip={() => router.replace(returnTo)}
+      />
+    )
   }
 
   return (

@@ -145,7 +145,7 @@ Elegir práctica ─► Ver días/horarios/lugares ─► Reservar ─► Confir
 Decision: practice selection is a **chip filter on the agenda**, not a separate screen. With 1–2 practice types a catalog step only adds a tap. Config flag `showCatalogStep` enables it for studios with >4 types.
 
 **Returning student ≤3 taps** (session persisted, filters remembered):
-1. Landing "Reservas" → agenda opens on the next day with availability, filtered by last practice/modality. *(Modality filter and remembered filter: pending slice, PRD ST-01 AC4; 2.1 ships the practice filter only.)*
+1. Landing "Reservas" → agenda opens on the next day with availability, filtered by last practice/modality. *(Modality filter and remembered filter shipped in the UX-fix slice, PRD ST-01 AC4: stored per device, falls back to "Todas" when storage is unavailable.)*
 2. Tap **Reservar** on a session.
 3. Tap **Confirmar reserva** in the sheet → done.
 

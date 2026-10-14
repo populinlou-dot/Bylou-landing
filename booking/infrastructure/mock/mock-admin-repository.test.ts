@@ -117,6 +117,24 @@ describe("MockAdminRepository (demo staff)", () => {
     const roster = await admin.getRoster(target.session.id)
     expect(roster.some((r) => r.displayName === "Alumna demo" && r.status === "confirmed")).toBe(true)
   })
+
+  it("shows the name the student saved in the profile step, as plain data", async () => {
+    const auth = new MockAuth()
+    const currentUserId = () => auth.currentUserId()
+    const repository = new MockBookingRepository({ clock, rules, currentUserId })
+    const admin = new MockAdminRepository({ clock, store: repository, currentUserId })
+    await auth.requestCode("alumna@example.test")
+    await auth.verifyCode("alumna@example.test", DEMO_OTP_CODE)
+    expect(await repository.getMyProfile()).toEqual({ displayName: "Alumna demo" })
+    expect(await repository.updateMyDisplayName("<b>Ana</b>")).toEqual({ ok: true, displayName: "<b>Ana</b>" })
+    expect(await repository.getMyProfile()).toEqual({ displayName: "<b>Ana</b>" })
+
+    await auth.signOut()
+    await auth.requestCode(DEMO_STAFF_EMAIL)
+    await auth.verifyCode(DEMO_STAFF_EMAIL, DEMO_OTP_CODE)
+    const students = await admin.searchStudents("")
+    expect(students.find((s) => s.userId === "demo-alumna")?.displayName).toBe("<b>Ana</b>")
+  })
 })
 
 const KEY_A = "00000000-0000-4000-8000-00000000a001"

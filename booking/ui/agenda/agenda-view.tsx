@@ -2,12 +2,13 @@
 
 import { AlertCircle, CalendarX2, RotateCw } from "lucide-react"
 import type { AgendaWeek, ClassTypeView } from "../../application"
+import type { Modality } from "../../domain"
 import { useBooking, useCopy } from "../booking-context"
 import { formatWeekBounds } from "../format"
 import { DisplayTitle, Eyebrow, StatusPanel, buttonClass } from "../primitives"
 import { AgendaSkeleton } from "./agenda-skeleton"
 import { DayGroup } from "./day-group"
-import { PracticeFilter } from "./practice-filter"
+import { ModalityFilter, PracticeFilter } from "./practice-filter"
 import { WeekNav } from "./week-nav"
 
 export type AgendaLoadState =
@@ -20,8 +21,10 @@ export interface AgendaViewProps {
   /** Last known class types, kept while a new week/filter loads so chips do not jump. */
   classTypes: ClassTypeView[]
   selectedClassTypeId: string | null
+  selectedModality: Modality | null
   isCurrentWeek: boolean
   onSelectClassType: (id: string | null) => void
+  onSelectModality: (modality: Modality | null) => void
   onPreviousWeek: () => void
   onNextWeek: () => void
   onToday: () => void
@@ -62,13 +65,16 @@ export function AgendaView(props: AgendaViewProps) {
           onNext={props.onNextWeek}
           onToday={props.onToday}
         />
-        {props.classTypes.length > 0 ? (
-          <PracticeFilter
-            classTypes={props.classTypes}
-            selectedId={props.selectedClassTypeId}
-            onSelect={props.onSelectClassType}
-          />
-        ) : null}
+        <div className="flex flex-col gap-3">
+          {props.classTypes.length > 0 ? (
+            <PracticeFilter
+              classTypes={props.classTypes}
+              selectedId={props.selectedClassTypeId}
+              onSelect={props.onSelectClassType}
+            />
+          ) : null}
+          <ModalityFilter selected={props.selectedModality} onSelect={props.onSelectModality} />
+        </div>
       </div>
 
       <p role="status" aria-live="polite" className="text-[14px] font-semibold text-muted-foreground">

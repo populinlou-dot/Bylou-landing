@@ -3,7 +3,14 @@
  * RPC envelopes follow DATA_MODEL §6 / migration 20261014000600: snake_case jsonb,
  * `{ ok: true, booking_id, … }` or `{ ok: false, code, … }`. Unknown codes become "unknown".
  */
-import { BOOKING_REJECTION_CODES, CANCELLATION_CODES, type Booking, type Modality, type StudioRules } from "../../domain"
+import {
+  BOOKING_REJECTION_CODES,
+  CANCELLATION_CODES,
+  type Attendance,
+  type Booking,
+  type Modality,
+  type StudioRules,
+} from "../../domain"
 import type {
   AuthCode,
   BookCode,
@@ -210,10 +217,16 @@ export function toStudioRules(row: StudioSettingsRow): StudioRules {
  * View row → SessionAvailability. A class type missing from the published catalog (visible only
  * through the caller's own booking) gets a minimal view built from the row itself.
  */
+/** The caller's own confirmed booking of a session (id + attendance), from an RLS-scoped `bookings` read. */
+export interface MyConfirmedBooking {
+  id: string
+  attendance: Attendance
+}
+
 export function toSessionAvailability(
   row: SessionViewRow,
   classTypes: ReadonlyMap<string, ClassTypeView>,
-  myBookingId: string | null,
+  mine: MyConfirmedBooking | null,
 ): SessionAvailability {
   const startsAt = iso(row.starts_at)
   const endsAt = iso(row.ends_at)
@@ -237,7 +250,8 @@ export function toSessionAvailability(
     classType,
     confirmedCount: row.confirmed_count,
     instructorName: row.instructor_name,
-    myBookingId,
+    myBookingId: mine?.id ?? null,
+    myAttendance: mine ? mine.attendance : null,
     myWaitlistPosition: null,
   }
 }

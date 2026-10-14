@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { getAgenda, getAgendaWeek, getSessionDetail } from "./get-agenda"
+import {
+  getAgenda,
+  getAgendaEntry,
+  getAgendaWeek,
+  getSessionDetail,
+  myOutcome,
+  replaceAgendaEntry,
+  studentAction,
+} from "./get-agenda"
 import { BA_RULES, availabilityAt, fakeRepository, fixedClock } from "./test-support"
 
 // Wednesday 2026-10-14 12:00 in Buenos Aires (UTC-3).
@@ -132,5 +140,121 @@ describe("getSessionDetail", () => {
       expect(await getSessionDetail(deps, { id })).toBeNull()
     }
     expect(repository.calls).toEqual([])
+  })
+})
+
+describe("student action and outcome — explicit evaluation order", () => {
+  const deps = (sessions: Parameters<typeof fakeRepository>[0]) => ({ repository: fakeRepository(sessions), clock: fixedClock(NOW) })
+  const entryOf = async (sessions: Parameters<typeof fakeRepository>[0], id: string) =>
+    (await getAgenda(deps(sessions), WEEK)).days.flatMap((d) => d.entries).find((e) => e.session.id === id)!
+
+  it("a past session the student attended reads as past + attended, never as 'already booked'", async () => {
+    // Domain order: session_started is checked before already_booked.
+    const entry = await entryOf(
+      [availabilityAt("2026-10-13T13:00:00.000Z", { id: "past", myBookingId: "b1", myAttendance: "attended" })],
+      "past",
+    )
+    expect(entry).toMatchObject({ state: "past", myBookingId: "b1", action: "none", myOutcome: "attended" })
+  })
+
+  it.each([
+    ["no_show", "absent"],
+    ["unknown", "booked"],
+  ] as const)("past + attendance %s → outcome %s", async (attendance, outcome) => {
+    const entry = await entryOf(
+      [availabilityAt("2026-10-13T13:00:00.000Z", { id: "past", myBookingId: "b1", myAttendance: attendance })],
+      "past",
+    )
+    expect(entry).toMatchObject({ state: "past", action: "none", myOutcome: outcome })
+  })
+
+  it("a past session without a booking has no outcome and no action", async () => {
+    const entry = await entryOf([availabilityAt("2026-10-13T13:00:00.000Z", { id: "past" })], "past")
+    expect(entry).toMatchObject({ state: "past", action: "none", myOutcome: null })
+  })
+
+  it("a started session the student booked shows 'booked' as outcome, not the booking CTA", async () => {
+    const entry = await entryOf(
+      [availabilityAt("2026-10-14T14:30:00.000Z", { id: "now", myBookingId: "b1" })],
+      "now",
+    )
+    expect(entry).toMatchObject({ state: "in_progress", action: "none", myOutcome: "booked" })
+  })
+
+  it("an upcoming booked session is 'booked' (even when full); a free one is 'book'; full/cancelled are 'none'", async () => {
+    const sessions = [
+      availabilityAt("2026-10-16T22:00:00.000Z", { id: "mine-full", capacity: 1, confirmed: 1, myBookingId: "b1" }),
+      availabilityAt("2026-10-16T23:00:00.000Z", { id: "free" }),
+      availabilityAt("2026-10-17T13:00:00.000Z", { id: "full", capacity: 1, confirmed: 1 }),
+      availabilityAt("2026-10-17T14:00:00.000Z", { id: "cancelled", status: "cancelled" }),
+    ]
+    const agenda = await getAgenda(deps(sessions), WEEK)
+    const byId = Object.fromEntries(agenda.days.flatMap((d) => d.entries).map((e) => [e.session.id, [e.action, e.myOutcome]]))
+    expect(byId).toEqual({
+      "mine-full": ["booked", null],
+      free: ["book", null],
+      full: ["none", null],
+      cancelled: ["none", null],
+    })
+  })
+
+  it("studentAction follows cancelled → started → booked → window/full", () => {
+    expect(studentAction("cancelled", "b1")).toBe("none")
+    expect(studentAction("past", "b1")).toBe("none")
+    expect(studentAction("in_progress", "b1")).toBe("none")
+    expect(studentAction("closed", "b1")).toBe("booked")
+    expect(studentAction("available", null)).toBe("book")
+    expect(studentAction("not_open", null)).toBe("none")
+    expect(myOutcome("available", "b1", "attended")).toBeNull()
+    expect(myOutcome("past", null, null)).toBeNull()
+  })
+})
+
+describe("getAgenda — modality filter (ST-01 AC4)", () => {
+  it("filters by modality and combines with the practice filter", async () => {
+    const repository = fakeRepository([
+      availabilityAt("2026-10-16T13:00:00.000Z", { id: "g-online", classTypeId: "ct-grupal", modality: "online" }),
+      availabilityAt("2026-10-16T22:00:00.000Z", { id: "g-studio", classTypeId: "ct-grupal", modality: "in_person" }),
+      availabilityAt("2026-10-17T13:00:00.000Z", { id: "i-studio", classTypeId: "ct-individual", modality: "in_person" }),
+    ])
+    const deps = { repository, clock: fixedClock(NOW) }
+    const ids = (a: Awaited<ReturnType<typeof getAgenda>>) => a.days.flatMap((d) => d.entries.map((e) => e.session.id))
+
+    expect(ids(await getAgenda(deps, { ...WEEK, modality: "in_person" }))).toEqual(["g-studio", "i-studio"])
+    expect(ids(await getAgenda(deps, { ...WEEK, modality: "online" }))).toEqual(["g-online"])
+    expect(ids(await getAgenda(deps, { ...WEEK, modality: "in_person", classTypeId: "ct-grupal" }))).toEqual(["g-studio"])
+    expect(ids(await getAgendaWeek(deps, { modality: null }))).toHaveLength(3)
+  })
+})
+
+describe("getAgendaEntry / replaceAgendaEntry — refresh one session from the repository", () => {
+  it("swaps the re-read session into the loaded agenda without touching the others", async () => {
+    const before = [
+      availabilityAt("2026-10-16T22:00:00.000Z", { id: "a", confirmed: 3 }),
+      availabilityAt("2026-10-17T13:00:00.000Z", { id: "b", confirmed: 1 }),
+    ]
+    const agenda = await getAgenda({ repository: fakeRepository(before), clock: fixedClock(NOW) }, WEEK)
+    const after = fakeRepository([availabilityAt("2026-10-16T22:00:00.000Z", { id: "a", confirmed: 4, myBookingId: "b-a" }), before[1]])
+
+    const fresh = await getAgendaEntry({ repository: after, clock: fixedClock(NOW) }, "a")
+    expect(after.calls).toContain("getSession a")
+    const next = replaceAgendaEntry(agenda, "a", fresh)
+    const a = next.days.flatMap((d) => d.entries).find((e) => e.session.id === "a")!
+    expect(a).toMatchObject({ spotsLeft: 4, action: "booked" })
+    expect(next.days.flatMap((d) => d.entries).find((e) => e.session.id === "b")).toBe(
+      agenda.days.flatMap((d) => d.entries).find((e) => e.session.id === "b"),
+    )
+    expect(next.total).toBe(2)
+  })
+
+  it("drops a session that is no longer visible and leaves other weeks untouched", async () => {
+    const agenda = await getAgenda(
+      { repository: fakeRepository([availabilityAt("2026-10-16T22:00:00.000Z", { id: "a" })]), clock: fixedClock(NOW) },
+      WEEK,
+    )
+    expect(await getAgendaEntry({ repository: fakeRepository([]), clock: fixedClock(NOW) }, "a")).toBeNull()
+    expect(replaceAgendaEntry(agenda, "a", null)).toMatchObject({ days: [], total: 0 })
+    expect(replaceAgendaEntry(agenda, "other-week", null)).toBe(agenda)
+    expect(await getAgendaEntry({ repository: fakeRepository([]), clock: fixedClock(NOW) }, "../x")).toBeNull()
   })
 })

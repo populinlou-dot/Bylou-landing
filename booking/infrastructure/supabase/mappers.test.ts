@@ -147,26 +147,25 @@ describe("row mappers", () => {
   })
 
   it("normalises timestamptz text and falls back when the class type is not in the catalog", () => {
-    const item = toSessionAvailability(
-      {
-        id: "s1",
-        class_type_id: "ct-hidden",
-        class_type_name: "Privada",
-        starts_at: "2026-10-15T21:00:00+00:00",
-        ends_at: "2026-10-15T22:15:00+00:00",
-        modality: "in_person",
-        instructor_name: "Lou",
-        capacity: 6,
-        confirmed_count: 2,
-        status: "scheduled",
-      },
-      new Map(),
-      "b1",
-    )
+    const viewRow = {
+      id: "s1",
+      class_type_id: "ct-hidden",
+      class_type_name: "Privada",
+      starts_at: "2026-10-15T21:00:00+00:00",
+      ends_at: "2026-10-15T22:15:00+00:00",
+      modality: "in_person" as const,
+      instructor_name: "Lou",
+      capacity: 6,
+      confirmed_count: 2,
+      status: "scheduled" as const,
+    }
+    const item = toSessionAvailability(viewRow, new Map(), { id: "b1", attendance: "attended" })
     expect(item.session.startsAt).toBe("2026-10-15T21:00:00.000Z")
     expect(item.classType).toEqual({ id: "ct-hidden", name: "Privada", description: null, durationMinutes: 75, defaultCapacity: 6 })
     expect(item.confirmedCount).toBe(2)
     expect(item.myBookingId).toBe("b1")
+    expect(item.myAttendance).toBe("attended")
+    expect(toSessionAvailability(viewRow, new Map(), null)).toMatchObject({ myBookingId: null, myAttendance: null })
   })
 
   const row = (status: MyBookingRow["status"]): MyBookingRow => ({

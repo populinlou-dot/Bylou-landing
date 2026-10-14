@@ -35,8 +35,10 @@ import {
   type CreditBalance,
   type InstantRange,
   type MyBooking,
+  type MyProfile,
   type SessionAvailability,
   type SessionPrivateDetails,
+  type UpdateProfileResult,
 } from "../../application"
 import { DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
 import { createDemoSeed, type DemoSeed } from "./demo-seed"
@@ -83,6 +85,8 @@ interface MockState extends DemoSeed {
   grantMeta: Record<string, MockGrantMeta>
   /** bookings.source; absent = "student". */
   bookingSources: Record<string, BookingSource>
+  /** profiles.display_name by user id (absent = not set yet). */
+  displayNames: Record<string, string>
 }
 
 /** The live in-memory studio shared with MockAdminRepository (mock only). */
@@ -101,6 +105,7 @@ export type MockStudio = Pick<
   | "ledger"
   | "grantMeta"
   | "bookingSources"
+  | "displayNames"
 > & { rules: StudioRules }
 
 /** Demo defaults for the seeded class types (all published). */
@@ -278,6 +283,23 @@ export class MockBookingRepository implements BookingRepository {
     return { ok: true, bookingId: booking.id, status: booking.status, refunded, replayed: false }
   }
 
+  async getMyProfile(): Promise<MyProfile> {
+    await this.delay()
+    const userId = this.requireUser()
+    return { displayName: this.data().displayNames[userId] ?? null }
+  }
+
+  /** Mirrors the `profiles.display_name` CHECK (1–80 characters); the caller validates first. */
+  async updateMyDisplayName(displayName: string): Promise<UpdateProfileResult> {
+    await this.delay()
+    const userId = this.userId()
+    if (!userId) return { ok: false, code: "unauthenticated" }
+    const length = Array.from(displayName).length
+    if (length < 1 || length > 80) return { ok: false, code: "invalid_input" }
+    this.data().displayNames[userId] = displayName
+    return { ok: true, displayName }
+  }
+
   /**
    * Mock-only: the live in-memory studio (sessions, bookings) shared with MockAdminRepository,
    * so a demo booking made on /reservas/ shows up in the /admin/ roster of the same page load.
@@ -298,6 +320,7 @@ export class MockBookingRepository implements BookingRepository {
       ledger: state.ledger,
       grantMeta: state.grantMeta,
       bookingSources: state.bookingSources,
+      displayNames: state.displayNames,
       rules: this.options.rules,
     }
   }
@@ -378,6 +401,8 @@ export class MockBookingRepository implements BookingRepository {
         [grant.id]: { note: "Pack demo", createdAt: grant.grantedAt, grantedBy: DEMO_STAFF_ID, requestKey: "demo-grant-key" },
       },
       bookingSources: {},
+      // The demo identities already have names, matching the /admin/ demo roster.
+      displayNames: { [DEMO_USER_ID]: "Alumna demo", [DEMO_STAFF_ID]: "Lou (demo)" },
     }
   }
 
@@ -433,13 +458,15 @@ export class MockBookingRepository implements BookingRepository {
     if (!this.isPublishedType(classType.id) && !(userId && bookings.some((b) => b.sessionId === id && b.userId === userId))) {
       return null
     }
+    const mine = userId ? this.myConfirmedBooking(id, userId) : undefined
     return structuredClone({
       session,
       classType,
       // Occupancy comes from the domain rule (only confirmed bookings take a spot).
       confirmedCount: availability(session, bookings).booked,
       instructorName: instructorBySessionId[id] ?? null,
-      myBookingId: userId ? (this.myConfirmedBooking(id, userId)?.id ?? null) : null,
+      myBookingId: mine?.id ?? null,
+      myAttendance: mine ? mine.attendance : null,
       myWaitlistPosition: null,
     })
   }

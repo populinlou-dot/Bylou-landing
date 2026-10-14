@@ -1,7 +1,7 @@
 -- Journey E (privacy / authorization) + F2 roster + B4 + E10 (DATA_MODEL §4, §12).
 begin;
 \ir _helpers.inc
-select plan(41);
+select plan(45);
 
 -- Fixtures (as postgres) ------------------------------------------------------
 select tests.setup_people();
@@ -93,6 +93,17 @@ select throws_ok(format('update public.profiles set email = %L where id = %L', '
 select lives_ok(format('update public.profiles set display_name = %L where id = %L', 'Nueva', tests.uid('A')),
   'E5 student updates own display_name');
 update public.profiles set display_name = 'Hacked' where id = tests.uid('B');   -- RLS: 0 rows
+-- Profile completion step (UX backlog #4) uses exactly this statement shape through PostgREST.
+select lives_ok(format('update public.profiles set display_name = %L where id = %L returning display_name', 'Ana', tests.uid('A')),
+  'E5 update … returning display_name (PostgREST update + select) is allowed on the own row');
+select throws_ok(format('update public.profiles set display_name = %L where id = %L', '', tests.uid('A')), '23514', null,
+  'E5 empty display_name rejected by the CHECK (1–80 chars)');
+select throws_ok(format('update public.profiles set display_name = %L where id = %L', repeat('a', 81), tests.uid('A')), '23514', null,
+  'E5 81-char display_name rejected by the CHECK');
+update public.profiles set display_name = 'Nueva' where id = tests.uid('A');
+select tests.as_anon();
+select throws_ok(format('update public.profiles set display_name = %L where id = %L', 'Anon', tests.uid('A')), '42501', null,
+  'E5 anon cannot update any profile');
 select tests.as_postgres();
 select is((select display_name from public.profiles where id = tests.uid('A')), 'Nueva', 'E5 own display_name changed');
 select is((select display_name from public.profiles where id = tests.uid('B')), 'test-b', 'E5 other profile untouched');

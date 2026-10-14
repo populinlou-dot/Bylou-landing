@@ -16,8 +16,10 @@ import {
   type CreditBalance,
   type InstantRange,
   type MyBooking,
+  type MyProfile,
   type SessionAvailability,
   type SessionPrivateDetails,
+  type UpdateProfileResult,
 } from "../../application"
 import type { SupabaseClientProvider } from "./client"
 import {
@@ -33,6 +35,7 @@ import {
   type ClassTypeRow,
   type CreditGrantRow,
   type MyBookingRow,
+  type MyConfirmedBooking,
   type PostgrestErrorLike,
   type PrivateDetailsRow,
   type SessionViewRow,
@@ -49,6 +52,12 @@ const MY_BOOKING_COLUMNS =
 const MY_BOOKINGS_LIMIT = 200
 /** Max ids per `in()` filter (36-char uuids → well under the 8 kB URL guideline). */
 const IN_CHUNK = 50
+
+interface MyConfirmedBookingRow {
+  id: string
+  session_id: string
+  attendance: MyConfirmedBooking["attendance"]
+}
 
 interface Response<T> {
   data: T | null
@@ -70,6 +79,36 @@ export class SupabaseBookingRepository implements BookingRepository {
     private readonly client: SupabaseClientProvider,
     private readonly clock: Clock,
   ) {}
+
+  async getMyProfile(): Promise<MyProfile> {
+    const userId = await this.requireUserId()
+    const response = await this.client().from("profiles").select("display_name").eq("id", userId).maybeSingle()
+    const row = unwrap(response as Response<{ display_name: string | null }>, "profiles")
+    return { displayName: row.display_name }
+  }
+
+  /**
+   * Column-level grant + `profiles_update_own` RLS: a student may update only her own
+   * `display_name` (and `phone`); `role` and `email` are not updatable (pgTAP E5).
+   */
+  async updateMyDisplayName(displayName: string): Promise<UpdateProfileResult> {
+    const userId = await this.currentUserId()
+    if (!userId) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client()
+      .from("profiles")
+      .update({ display_name: displayName })
+      .eq("id", userId)
+      .select("display_name")
+      .maybeSingle()) as Response<{ display_name: string | null }>
+    if (response.error) {
+      // 23514 = the display_name CHECK (1–80 chars): the UI validates first, so this is bad input.
+      if (response.error.code === "23514") return { ok: false, code: "invalid_input" }
+      return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    }
+    // No row back = RLS filtered the update (not the caller's row).
+    if (!response.data || typeof response.data.display_name !== "string") return { ok: false, code: "forbidden" }
+    return { ok: true, displayName: response.data.display_name }
+  }
 
   async getStudioRules(): Promise<StudioRules> {
     const response = await this.client()
@@ -102,7 +141,7 @@ export class SupabaseBookingRepository implements BookingRepository {
       this.listClassTypes(),
     ])
     const rows = unwrap(rowsResponse as Response<SessionViewRow[]>, "session_availability")
-    const mine = rows.length > 0 ? await this.myConfirmedBookingsInRange(range) : new Map<string, string>()
+    const mine = rows.length > 0 ? await this.myConfirmedBookingsInRange(range) : new Map<string, MyConfirmedBooking>()
     const byId = new Map(classTypes.map((ct) => [ct.id, ct]))
     return rows.map((row) => toSessionAvailability(row, byId, mine.get(row.id) ?? null))
   }
@@ -213,37 +252,37 @@ export class SupabaseBookingRepository implements BookingRepository {
    * session id → the caller's confirmed booking id for sessions starting in `range`. Filters on
    * the embedded session instead of sending every session id (a busy week would overflow the URL).
    */
-  private async myConfirmedBookingsInRange(range: InstantRange): Promise<Map<string, string>> {
-    const result = new Map<string, string>()
+  private async myConfirmedBookingsInRange(range: InstantRange): Promise<Map<string, MyConfirmedBooking>> {
+    const result = new Map<string, MyConfirmedBooking>()
     const userId = await this.currentUserId()
     if (!userId) return result
     const response = await this.client()
       .from("bookings")
-      .select("id, session_id, session:sessions!inner(starts_at)")
+      .select("id, session_id, attendance, session:sessions!inner(starts_at)")
       .eq("user_id", userId)
       .eq("status", "confirmed")
       .gte("session.starts_at", range.from)
       .lt("session.starts_at", range.to)
-    for (const row of unwrap(response as unknown as Response<Array<{ id: string; session_id: string }>>, "bookings")) {
-      result.set(row.session_id, row.id)
+    for (const row of unwrap(response as unknown as Response<MyConfirmedBookingRow[]>, "bookings")) {
+      result.set(row.session_id, { id: row.id, attendance: row.attendance })
     }
     return result
   }
 
-  /** session id → the caller's confirmed booking id, for a few sessions. Empty when signed out. */
-  private async myConfirmedBookings(sessionIds: string[]): Promise<Map<string, string>> {
-    const result = new Map<string, string>()
+  /** session id → the caller's confirmed booking (id + attendance), for a few sessions. Empty when signed out. */
+  private async myConfirmedBookings(sessionIds: string[]): Promise<Map<string, MyConfirmedBooking>> {
+    const result = new Map<string, MyConfirmedBooking>()
     if (sessionIds.length === 0) return result
     const userId = await this.currentUserId()
     if (!userId) return result
     const response = await this.client()
       .from("bookings")
-      .select("id, session_id")
+      .select("id, session_id, attendance")
       .eq("user_id", userId)
       .eq("status", "confirmed")
       .in("session_id", sessionIds)
-    for (const row of unwrap(response as Response<Array<{ id: string; session_id: string }>>, "bookings")) {
-      result.set(row.session_id, row.id)
+    for (const row of unwrap(response as Response<MyConfirmedBookingRow[]>, "bookings")) {
+      result.set(row.session_id, { id: row.id, attendance: row.attendance })
     }
     return result
   }

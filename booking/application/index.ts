@@ -60,10 +60,12 @@ export {
   type CreditGrantView,
   type InstantRange,
   type MyBooking,
+  type MyProfile,
   type RequestCodeResult,
   type SessionAvailability,
   type SessionPrivateDetails,
   type TransportCode,
+  type UpdateProfileResult,
   type VerifyCodeResult,
 } from "./ports"
 export type { BookingConfigVariable, BookingRuntime } from "./runtime"
@@ -72,6 +74,10 @@ export {
   getAgendaWeek,
   getSessionDetail,
   isValidSessionId,
+  myOutcome,
+  getAgendaEntry,
+  replaceAgendaEntry,
+  studentAction,
   toAgendaEntry,
   type Agenda,
   type AgendaDay,
@@ -81,7 +87,9 @@ export {
   type AgendaWeek,
   type AgendaWeekQuery,
   type SessionDetail,
+  type MyOutcome,
   type SessionState,
+  type StudentAction,
 } from "./get-agenda"
 export {
   cancelBooking,
@@ -189,4 +197,22 @@ export {
   type GrantField,
   type StudentDetail,
 } from "./admin-students"
+export {
+  MODALITIES,
+  NO_AGENDA_FILTERS,
+  parseAgendaFilters,
+  reconcileAgendaFilters,
+  serializeAgendaFilters,
+  type AgendaFilters,
+} from "./agenda-filters"
+export {
+  DISPLAY_NAME_MAX,
+  needsDisplayName,
+  saveDisplayName,
+  validateDisplayName,
+  type DisplayNameError,
+  type DisplayNameValidation,
+  type ProfileDeps,
+  type SaveDisplayNameResult,
+} from "./profile"
 export { addDays, isoWeekday, localDateOf, startOfWeek, zonedTimeToInstant, type LocalDate } from "./time-zone"

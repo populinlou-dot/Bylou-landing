@@ -370,6 +370,21 @@ export const UI_COPY_KEYS = [
   "admin.cancelFor.notAllowed",
   "admin.cancelFor.notFound",
   "admin.cancelFor.error",
+  // Student UX fixes: past-session outcome, modality filter, profile completion
+  "session.booked",
+  "agenda.filter.modality",
+  "filter.modality.inPerson",
+  "filter.modality.online",
+  "profile.title",
+  "profile.intro",
+  "profile.label",
+  "profile.save",
+  "profile.saving",
+  "profile.skip",
+  "profile.error.empty",
+  "profile.error.too_long",
+  "profile.error.invalid_chars",
+  "profile.error.save",
 ] as const
 
 export type UiCopyKey = (typeof UI_COPY_KEYS)[number]
@@ -448,4 +463,5 @@ export const REQUIRED_PLACEHOLDERS: Partial<Record<CopyKey, readonly string[]>> 
   "admin.bookFor.none": ["days"],
   "admin.bookFor.done": ["n"],
   "admin.cancelFor.ctaLabel": ["date"],
+  "profile.error.too_long": ["max"],
 }

@@ -108,6 +108,21 @@ describe("Mis reservas", () => {
     expect(cancel).toHaveBeenCalledWith({ bookingId: "b-far", idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/), acceptLate: false })
   })
 
+  it("re-reads my bookings from the repository after a cancellation (no optimistic update)", async () => {
+    const repository = fakeRepository([], { rules: BYLOU_RULES, myBookings: [FAR] })
+    const cancelled: MyBooking = { ...FAR, booking: { ...FAR.booking, status: "cancelled" }, refunded: true }
+    const list = vi.spyOn(repository, "listMyBookings").mockResolvedValueOnce([FAR]).mockResolvedValueOnce([cancelled])
+    renderMine(repository)
+    const card = await screen.findByRole("article")
+    fireEvent.click(within(card).getByRole("button", { name: "Cancelar reserva" }))
+    const dialog = await screen.findByRole("dialog", { name: "¿Cancelar esta reserva?" })
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sí, cancelar" }))
+
+    expect(await screen.findByText("Reserva cancelada. La clase volvió a tu pack.")).toBeTruthy()
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(await screen.findByText("Todavía no tenés clases reservadas.")).toBeTruthy()
+  })
+
   it("shows the contact copy when the server denies a late cancellation", async () => {
     const repository = fakeRepository([], { rules: BYLOU_RULES, myBookings: [FAR] })
     vi.spyOn(repository, "cancel").mockResolvedValue({ ok: false, code: "cancellation_too_late" })

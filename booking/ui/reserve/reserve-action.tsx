@@ -12,9 +12,10 @@ import { ConfirmSheet } from "./confirm-sheet"
 import { useDataRefresh } from "./refresh-context"
 
 /**
- * "Reservar" for one session. Signed out → sign-in with the intent preserved
- * (returnTo = session detail with `reservar=1`). Signed in → confirm sheet.
- * Already booked → note + link to "Mis reservas". Not bookable → nothing (the card says why).
+ * "Reservar" for one session, driven by `entry.action` (decided in the application layer in the
+ * domain order, so a past session never reads as "already booked"). Signed out → sign-in with
+ * the intent preserved (returnTo = session detail with `reservar=1`). Signed in → confirm sheet.
+ * Booked (upcoming) → note + link to "Mis reservas". Anything else → nothing (the card says why).
  */
 export function ReserveAction({
   entry,
@@ -35,15 +36,23 @@ export function ReserveAction({
   const router = useRouter()
   const refresh = useDataRefresh()
   const [open, setOpen] = useState(false)
-  const booked = useRef(false)
   const autoOpened = useRef(false)
-  const bookable = entry.state === "available" && entry.myBookingId === null
+  /** Set when the sheet closes after a booking: the "Reservar" button is gone, focus the link instead. */
+  const focusMine = useRef(false)
+  const mineLink = useRef<HTMLAnchorElement>(null)
+  const bookable = entry.action === "book"
 
   useEffect(() => {
     if (!autoOpen || autoOpened.current || auth.status !== "signed_in" || !bookable) return
     autoOpened.current = true
     setOpen(true)
   }, [autoOpen, auth.status, bookable])
+
+  useEffect(() => {
+    if (open || !focusMine.current || !mineLink.current) return
+    focusMine.current = false
+    mineLink.current.focus()
+  }, [open, entry.action])
 
   function start(event: MouseEvent<HTMLButtonElement>) {
     if (auth.status === "loading") return
@@ -56,23 +65,21 @@ export function ReserveAction({
     setOpen(true)
   }
 
-  function close() {
-    setOpen(false)
-    if (booked.current) {
-      booked.current = false
-      refresh()
-    }
+  function booked() {
+    // Re-read the session right away so the card behind the sheet shows the new spots count.
+    focusMine.current = true
+    refresh(entry.session.id)
   }
 
   return (
     <>
-      {entry.myBookingId ? (
+      {entry.action === "booked" ? (
         <div className={cx("flex flex-col gap-1", !fullWidth && "sm:flex-row sm:items-center sm:gap-3")}>
           <p className="flex items-center gap-1.5 text-[14.5px] font-semibold text-[color:var(--success)]">
             <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
             {t("reason.already_booked")}
           </p>
-          <Link href={MY_BOOKINGS_PATH} className={buttonClass.link}>
+          <Link ref={mineLink} href={MY_BOOKINGS_PATH} className={buttonClass.link}>
             {t("success.mine")}
           </Link>
         </div>
@@ -87,9 +94,7 @@ export function ReserveAction({
           {t("session.cta")}
         </button>
       ) : null}
-      {open ? (
-        <ConfirmSheet entry={entry} timezone={timezone} onClose={close} onBooked={() => (booked.current = true)} />
-      ) : null}
+      {open ? <ConfirmSheet entry={entry} timezone={timezone} onClose={() => setOpen(false)} onBooked={booked} /> : null}
     </>
   )
 }

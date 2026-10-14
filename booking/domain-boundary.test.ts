@@ -9,9 +9,9 @@ import { describe, expect, it } from "vitest"
  *
  * - booking/domain: pure TS, imports nothing outside itself.
  * - booking/application: imports only booking/domain and its own files.
- * - booking/ui: never imports brands/*, booking/infrastructure or @supabase/*. The brand and
- *   adapters arrive through props/context from the composition root (app/reservas/**).
- *   UI test files may import a brand as a fixture.
+ * - booking/ui and booking/admin: never import brands/*, booking/infrastructure or @supabase/*.
+ *   The brand and adapters arrive through props/context from the composition roots
+ *   (app/reservas/**, app/admin/**, app/_booking). UI test files may import a brand as a fixture.
  * Test files (*.test.ts[x]) may also import the test runner / testing library.
  */
 const BOOKING_DIR = fileURLToPath(new URL(".", import.meta.url))
@@ -19,6 +19,7 @@ const ROOT_DIR = resolve(BOOKING_DIR, "..")
 const DOMAIN_DIR = join(BOOKING_DIR, "domain")
 const APPLICATION_DIR = join(BOOKING_DIR, "application")
 const UI_DIR = join(BOOKING_DIR, "ui")
+const ADMIN_DIR = join(BOOKING_DIR, "admin")
 const BRANDS_DIR = join(ROOT_DIR, "brands")
 const INFRASTRUCTURE_DIR = join(BOOKING_DIR, "infrastructure")
 
@@ -70,6 +71,7 @@ const LAYERS = [
   { name: "booking/domain", dir: DOMAIN_DIR, rule: onlyInside(DOMAIN_DIR), minFiles: 6 },
   { name: "booking/application", dir: APPLICATION_DIR, rule: onlyInside(DOMAIN_DIR, APPLICATION_DIR), minFiles: 3 },
   { name: "booking/ui", dir: UI_DIR, rule: uiRule, minFiles: 5 },
+  { name: "booking/admin", dir: ADMIN_DIR, rule: uiRule, minFiles: 5 },
 ]
 
 function listTsFiles(dir: string): string[] {
@@ -107,9 +109,10 @@ describe("@supabase/* confinement", () => {
   const SELF = fileURLToPath(import.meta.url) // its self-check fixtures mention @supabase on purpose
   const scanned = [BOOKING_DIR, BRANDS_DIR, APP_DIR].flatMap(listTsFiles).filter((file) => file !== SELF)
 
-  it("scans the adapter and the UI", () => {
+  it("scans the adapter, the UI and the admin UI", () => {
     expect(scanned.some((file) => isInside(file, SUPABASE_ADAPTER_DIR))).toBe(true)
     expect(scanned.some((file) => isInside(file, UI_DIR))).toBe(true)
+    expect(scanned.some((file) => isInside(file, ADMIN_DIR))).toBe(true)
   })
 
   it("imports @supabase/* only from booking/infrastructure/supabase", () => {
@@ -202,6 +205,24 @@ describe("boundary scanner self-checks", () => {
     expect(violations(uiRule, UI_DIR, join(UI_DIR, "fake.test.tsx"), source)).toEqual([
       "fake.test.tsx -> ../infrastructure/data-source",
       "fake.test.tsx -> @supabase/supabase-js",
+    ])
+  })
+
+  it("applies the same rule to booking/admin (it may reuse booking/ui)", () => {
+    const adminRule = LAYERS[3].rule
+    const source = [
+      'import { useCopy } from "../../ui/booking-context"',
+      'import { getAdminDay } from "../../application"',
+      'import { MockAdminRepository } from "../../infrastructure/mock"',
+      'import { SupabaseAdminRepository } from "@/booking/infrastructure/supabase"',
+      'import { bylouBrand } from "@/brands/bylou"',
+      'import type { SupabaseClient } from "@supabase/supabase-js"',
+    ].join("\n")
+    expect(violations(adminRule, ADMIN_DIR, join(ADMIN_DIR, "day", "fake.tsx"), source)).toEqual([
+      "day/fake.tsx -> ../../infrastructure/mock",
+      "day/fake.tsx -> @/booking/infrastructure/supabase",
+      "day/fake.tsx -> @/brands/bylou",
+      "day/fake.tsx -> @supabase/supabase-js",
     ])
   })
 })

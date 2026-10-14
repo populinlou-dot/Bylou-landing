@@ -1,6 +1,8 @@
 /** Test helpers for application use cases (no test-runner imports, no adapters). */
 import type { Session, StudioRules } from "../domain"
 import type {
+  AdminRepository,
+  AdminSessionView,
   AuthPort,
   AuthUser,
   BookingRepository,
@@ -8,8 +10,10 @@ import type {
   Clock,
   CreditBalance,
   MyBooking,
+  RosterEntry,
   SessionAvailability,
   SessionPrivateDetails,
+  StaffRole,
 } from "./ports"
 
 export const BA_RULES: StudioRules = {
@@ -157,6 +161,80 @@ export function fakeAuth(initial: AuthUser | null = TEST_USER): AuthPort & { set
     setUser(next) {
       user = next
       listeners.forEach((l) => l(user))
+    },
+  }
+}
+
+/** Admin view of a session (any status/publication) for admin use-case and UI tests. */
+export function adminSessionAt(
+  startsAt: string,
+  overrides: { id?: string; confirmed?: number; capacity?: number; status?: Session["status"]; minutes?: number; name?: string; published?: boolean } = {},
+): AdminSessionView {
+  const minutes = overrides.minutes ?? 60
+  return {
+    session: {
+      id: overrides.id ?? `s-${startsAt}`,
+      classTypeId: "ct-grupal",
+      startsAt,
+      endsAt: new Date(Date.parse(startsAt) + minutes * 60_000).toISOString(),
+      capacity: overrides.capacity ?? 8,
+      modality: "in_person",
+      status: overrides.status ?? "scheduled",
+    },
+    classTypeName: overrides.name ?? "Clase grupal",
+    instructorName: "Lou",
+    isPublished: overrides.published ?? true,
+    confirmedCount: overrides.confirmed ?? 0,
+  }
+}
+
+export function rosterEntry(id: string, overrides: Partial<RosterEntry> = {}): RosterEntry {
+  return {
+    bookingId: id,
+    userId: `u-${id}`,
+    displayName: `Alumna ${id}`,
+    email: `${id}@example.test`,
+    status: "confirmed",
+    attendance: "unknown",
+    bookedAt: "2026-10-10T12:00:00.000Z",
+    ...overrides,
+  }
+}
+
+export interface FakeAdminOptions {
+  role?: StaffRole | null
+  sessions?: AdminSessionView[]
+  roster?: Record<string, RosterEntry[]>
+}
+
+/**
+ * In-memory admin fake that records calls. Write methods succeed by default (echoing the
+ * requested mark); tests override them with vi.spyOn.
+ */
+export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminRepository & { calls: string[] } {
+  const calls: string[] = []
+  const sessions = options.sessions ?? []
+  return {
+    calls,
+    async getMyRole() {
+      calls.push("getMyRole")
+      return options.role === undefined ? "staff" : options.role
+    },
+    async listSessions(range) {
+      calls.push(`listSessions ${range.from} ${range.to}`)
+      return sessions.filter((s) => s.session.startsAt >= range.from && s.session.startsAt < range.to)
+    },
+    async getSession(id) {
+      calls.push(`getSession ${id}`)
+      return sessions.find((s) => s.session.id === id) ?? null
+    },
+    async getRoster(sessionId) {
+      calls.push(`getRoster ${sessionId}`)
+      return options.roster?.[sessionId] ?? []
+    },
+    async markAttendance(cmd) {
+      calls.push(`markAttendance ${cmd.bookingId} ${cmd.attendance}`)
+      return { ok: true, bookingId: cmd.bookingId, attendance: cmd.attendance }
     },
   }
 }

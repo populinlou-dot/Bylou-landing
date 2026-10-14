@@ -104,3 +104,11 @@ The `domain` purity rule is enforced by an automated test that scans imports (ES
 - `studio_settings` in Postgres is the enforcement source for RPCs.
 - `brands/*` rules are defaults for the seed data and the mock adapter, so the UI preview and the DB stay aligned by construction.
 - Late cancellation follows `lateCancelPolicy`. Bylou: `deny` (see ADR-011), so the `cancel.closed` copy (contact Lou) applies; `cancel.late` is only needed for studios using `allow_without_refund`. The confirmation-email copy stays hidden until emails exist (V2).
+
+## ADR-015 — Admin reads via staff RLS; admin writes via RPC
+**Accepted (Phase 4.1).**
+- Admin read views (day sessions, roster) use plain table queries with explicit columns. The existing policies (`profiles_select`, `bookings_select`, `sessions_select_auth`) already let staff read every row while a student reads only her own. No `SECURITY DEFINER` read RPC was added.
+- Admin writes stay RPC-only (`mark_attendance`, `create_session`, `admin_cancel_session`, `grant_credits`), each starting with `private.assert_staff()`.
+- `supabase/tests/database/06_admin_ui_reads.test.sql` pins this contract, including the named FK `bookings_user_id_fkey` that the roster query depends on.
+- Routes: `/admin/?dia=YYYY-MM-DD` (day view) and `/admin/clase/?id=` (roster), per the `UX_DESIGN.md` route map. `returnTo` accepts `/admin/…`. `/reservas` and `/admin` share one composition root in `app/_booking/composition.ts`.
+- The mock adapter signs in any `staff@…` email as the demo staff user.

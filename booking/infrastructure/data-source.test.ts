@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_STUDIO_RULES } from "../config"
-import { createBookingRuntime, resolveDataSource } from "./data-source"
-import { MockAuth, MockBookingRepository } from "./mock"
-import { SupabaseAuth, SupabaseBookingRepository } from "./supabase"
+import { createBookingAdapters, createBookingRuntime, resolveDataSource } from "./data-source"
+import { MockAdminRepository, MockAuth, MockBookingRepository } from "./mock"
+import { SupabaseAdminRepository, SupabaseAuth, SupabaseBookingRepository } from "./supabase"
 
 const options = { rules: DEFAULT_STUDIO_RULES }
 
@@ -100,5 +100,24 @@ describe("createBookingRuntime — supabase (ADR-013: never falls back to mock)"
       variable: "NEXT_PUBLIC_SUPABASE_ANON_KEY",
       received: null,
     })
+  })
+})
+
+describe("createBookingAdapters — admin side (Phase 4.1)", () => {
+  it("has no admin adapter unless the runtime is ready", () => {
+    expect(createBookingAdapters(undefined, options).admin).toBeNull()
+    expect(createBookingAdapters("supabase", { ...options, supabase: {} }).admin).toBeNull()
+  })
+
+  it("pairs the mock admin with the mock runtime", () => {
+    const { runtime, admin } = createBookingAdapters("mock", options)
+    expect(runtime.status === "ready" && runtime.isDemo).toBe(true)
+    expect(admin).toBeInstanceOf(MockAdminRepository)
+  })
+
+  it("pairs the Supabase admin with the Supabase runtime", () => {
+    const { runtime, admin } = createBookingAdapters("supabase", { ...options, supabase: { url: LOCAL_URL, anonKey: ANON_KEY } })
+    expect(runtime.status === "ready" && runtime.isDemo).toBe(false)
+    expect(admin).toBeInstanceOf(SupabaseAdminRepository)
   })
 })

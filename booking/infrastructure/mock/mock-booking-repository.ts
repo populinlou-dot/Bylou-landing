@@ -211,6 +211,14 @@ export class MockBookingRepository implements BookingRepository {
     return { ok: true, bookingId: booking.id, status: booking.status, refunded, replayed: false }
   }
 
+  /**
+   * Mock-only: the live in-memory studio (sessions, bookings) shared with MockAdminRepository,
+   * so a demo booking made on /reservas/ shows up in the /admin/ roster of the same page load.
+   */
+  sharedState(): Pick<MockState, "sessions" | "classTypes" | "bookings" | "instructorBySessionId"> {
+    return this.data()
+  }
+
   /** Seeded once per instance from the clock, so ids stay stable while the page is open. */
   private data(): MockState {
     if (!this.state) this.state = this.createState()

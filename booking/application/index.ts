@@ -1,6 +1,14 @@
 export {
   RepositoryError,
   TRANSPORT_CODES,
+  type AdminRepository,
+  type AdminSessionView,
+  type AttendanceCode,
+  type AttendanceMark,
+  type MarkAttendanceCommand,
+  type MarkAttendanceResult,
+  type RosterEntry,
+  type StaffRole,
   type AuthCode,
   type AuthPort,
   type AuthUser,
@@ -51,5 +59,31 @@ export {
   type MyAccount,
   type MyBookingEntry,
 } from "./booking-actions"
-export { AGENDA_PATH, MY_BOOKINGS_PATH, SIGN_IN_PATH, sanitizeReturnTo, sessionHref, signInHref } from "./return-to"
+export {
+  ADMIN_PATH,
+  ADMIN_SESSION_PATH,
+  AGENDA_PATH,
+  MY_BOOKINGS_PATH,
+  SIGN_IN_PATH,
+  adminDayHref,
+  adminSessionHref,
+  sanitizeReturnTo,
+  sessionHref,
+  signInHref,
+} from "./return-to"
+export {
+  getAdminDay,
+  getAdminSessionDetail,
+  isValidLocalDate,
+  markAttendance,
+  resolveStaffAccess,
+  rosterLabel,
+  toAdminDayEntry,
+  type AdminDay,
+  type AdminDayEntry,
+  type AdminDeps,
+  type AdminSessionDetail,
+  type AdminSessionState,
+  type StaffAccess,
+} from "./admin"
 export { addDays, isoWeekday, localDateOf, startOfWeek, zonedTimeToInstant, type LocalDate } from "./time-zone"

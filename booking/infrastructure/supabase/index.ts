@@ -2,3 +2,4 @@ export { createSupabaseClientProvider, type SupabaseClientProvider } from "./cli
 export { looksSecret, resolveSupabaseConfig, type SupabaseConfig, type SupabaseConfigResolution } from "./config"
 export { SupabaseAuth } from "./supabase-auth"
 export { SupabaseBookingRepository } from "./supabase-booking-repository"
+export { SupabaseAdminRepository } from "./supabase-admin-repository"

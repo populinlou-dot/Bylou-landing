@@ -1,12 +1,19 @@
 /**
  * In-memory AuthPort for the `mock` data source. No email is sent: the fixed demo code is
  * returned by requestCode and shown on screen (ARCHITECTURE §10). Every email signs in as the
- * same fictional demo student, so the demo pack and history are always there.
+ * same fictional demo student, so the demo pack and history are always there — except an
+ * address whose local part is "staff" (e.g. staff@demo.test), which signs in as the fictional
+ * demo staff member so the /admin/ demo works (Phase 4.1).
  */
 import type { AuthPort, AuthUser, RequestCodeResult, VerifyCodeResult } from "../../application"
 
 export const DEMO_OTP_CODE = "123456"
 export const DEMO_USER_ID = "demo-alumna"
+export const DEMO_STAFF_ID = "demo-staff"
+/** Shown as a hint on the admin sign-in state in demo mode. */
+export const DEMO_STAFF_EMAIL = "staff@demo.test"
+
+const isDemoStaffEmail = (email: string) => email.split("@")[0] === "staff"
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -49,8 +56,9 @@ export class MockAuth implements AuthPort {
     if (!EMAIL.test(normalized)) return { ok: false, code: "invalid_email" }
     if (this.pendingEmail !== normalized || code.trim() !== DEMO_OTP_CODE) return { ok: false, code: "invalid_code" }
     this.pendingEmail = null
-    this.setUser({ id: DEMO_USER_ID, email: normalized })
-    return { ok: true, user: { id: DEMO_USER_ID, email: normalized } }
+    const user = { id: isDemoStaffEmail(normalized) ? DEMO_STAFF_ID : DEMO_USER_ID, email: normalized }
+    this.setUser(user)
+    return { ok: true, user: { ...user } }
   }
 
   async signOut(): Promise<void> {

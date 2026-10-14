@@ -164,3 +164,59 @@ export interface AuthPort {
   verifyCode(email: string, code: string): Promise<VerifyCodeResult>
   signOut(): Promise<void>
 }
+
+/* ---------- Admin (Phase 4.1, AD-01 / AD-06 / AD-07) ---------- */
+
+/** `profiles.role` of the signed-in user. UX only: every admin call is re-checked server-side. */
+export type StaffRole = "staff" | "student"
+
+/** One session as staff see it: every status, published or not. */
+export interface AdminSessionView {
+  session: Session
+  classTypeName: string
+  instructorName: string | null
+  isPublished: boolean
+  confirmedCount: number
+}
+
+/** One booking row of a session roster. Names are user-provided text: render as plain text only. */
+export interface RosterEntry {
+  bookingId: string
+  userId: string
+  /** `profiles.display_name`; null/blank when the student has not set one. */
+  displayName: string | null
+  /** Confirmed address only (null until confirmed); staff fallback when there is no name. */
+  email: string | null
+  status: Booking["status"]
+  attendance: Booking["attendance"]
+  bookedAt: IsoDateTime
+}
+
+export type AttendanceMark = "attended" | "no_show" | "unknown"
+
+export interface MarkAttendanceCommand {
+  bookingId: string
+  attendance: AttendanceMark
+}
+
+/** RPC codes of `mark_attendance` (DATA_MODEL §13) plus transport failures. */
+export type AttendanceCode = "attendance_window_closed" | "not_found" | TransportCode
+
+export type MarkAttendanceResult =
+  | { ok: true; bookingId: string; attendance: AttendanceMark }
+  | { ok: false; code: AttendanceCode }
+
+/**
+ * Staff read/write side. Reads throw RepositoryError (`unauthenticated`, `forbidden`, …);
+ * writes return business refusals as data. The database is the only authority (ADR-005).
+ */
+export interface AdminRepository {
+  /** Role of the signed-in user; null when signed out. Reads only the caller's own profile. */
+  getMyRole(): Promise<StaffRole | null>
+  /** Sessions starting in `[from, to)`, any status, ordered by start. */
+  listSessions(range: InstantRange): Promise<AdminSessionView[]>
+  getSession(id: string): Promise<AdminSessionView | null>
+  /** Every booking of the session (any status), oldest first. */
+  getRoster(sessionId: string): Promise<RosterEntry[]>
+  markAttendance(cmd: MarkAttendanceCommand): Promise<MarkAttendanceResult>
+}

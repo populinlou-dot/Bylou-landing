@@ -4,10 +4,24 @@
  * `private.is_staff()` (migration 20261014000500); a student gets only her own rows, never
  * someone else's. Every write goes through a staff RPC that starts with `private.assert_staff()`
  * (ADR-005, ADR-015): mark_attendance, create_session, admin_upsert_class_type,
- * admin_update_session, admin_cancel_session.
+ * admin_update_session, admin_cancel_session, grant_credits, admin_adjust_credits, admin_book_for,
+ * admin_cancel_for. Student balances come from the staff read RPCs admin_search_students /
+ * admin_student_summary, so they always match the server's definition (Phase 4.3).
  */
 import {
   RepositoryError,
+  type AdjustCreditsCommand,
+  type AdjustCreditsResult,
+  type AdminGrantView,
+  type AdminLedgerEntry,
+  type BookForStudentCommand,
+  type BookForStudentResult,
+  type CancelForStudentCommand,
+  type CancelForStudentResult,
+  type GrantCreditsCommand,
+  type GrantCreditsResult,
+  type StudentBookingView,
+  type StudentSummary,
   type AdminClassTypeView,
   type AdminRepository,
   type AdminSessionView,
@@ -41,6 +55,20 @@ import {
   type RosterRow,
 } from "./admin-mappers"
 import { mapPostgrestError, type PostgrestErrorLike } from "./mappers"
+import {
+  mapAdjustCreditsRpc,
+  mapBookForStudentRpc,
+  mapCancelForStudentRpc,
+  mapGrantCreditsRpc,
+  mapSearchStudentsRpc,
+  mapStudentSummaryRpc,
+  toAdminGrantView,
+  toAdminLedgerEntry,
+  toStudentBookingView,
+  type LedgerRow,
+  type StudentBookingRow,
+  type StudentGrantRow,
+} from "./student-mappers"
 
 const ADMIN_SESSION_COLUMNS =
   "id, class_type_id, starts_at, ends_at, capacity, confirmed_count, modality, status, is_published, instructor_name, " +
@@ -50,6 +78,12 @@ const ROSTER_COLUMNS =
   "id, user_id, status, attendance, created_at, profile:profiles!bookings_user_id_fkey(display_name, email)"
 const CLASS_TYPE_COLUMNS =
   "id, name, description, default_duration_minutes, default_capacity, default_modality, is_published, sort_order"
+const GRANT_COLUMNS = "id, credits_total, credits_remaining, valid_from, expires_at, note, created_at"
+/** bookings → sessions has a single FK; class type name through the session. Explicit columns only. */
+const STUDENT_BOOKING_COLUMNS =
+  "id, session_id, status, attendance, refunded, source, created_at, " +
+  "session:sessions(starts_at, ends_at, status, class_type:class_types(name))"
+const LEDGER_COLUMNS = "id, user_id, grant_id, booking_id, reason, delta, note, actor_id, created_at"
 /** Upper bound for one day's sessions / one roster (capacity ≤ 100 plus cancellations). */
 const ROW_LIMIT = 500
 
@@ -194,6 +228,110 @@ export class SupabaseAdminRepository implements AdminRepository {
     const response = (await this.client().rpc("admin_cancel_session", { p_session_id: cmd.sessionId })) as Response<unknown>
     if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
     return mapCancelSessionRpc(response.data)
+  }
+
+  async searchStudents(query: string): Promise<StudentSummary[]> {
+    await this.requireUserId()
+    const response = (await this.client().rpc("admin_search_students", {
+      p_query: query === "" ? null : query,
+      p_limit: 50,
+    })) as Response<unknown>
+    const students = mapSearchStudentsRpc(unwrap(response, "admin_search_students"))
+    if (!students) throw new RepositoryError("unknown", "admin_search_students: unrecognised response")
+    return students
+  }
+
+  async getStudent(userId: string): Promise<StudentSummary | null> {
+    await this.requireUserId()
+    const response = (await this.client().rpc("admin_student_summary", { p_user_id: userId })) as Response<unknown>
+    if (response.error && mapPostgrestError(response.error, response.status) === "invalid_input") return null
+    const student = mapStudentSummaryRpc(unwrap(response, "admin_student_summary"))
+    if (student === undefined) throw new RepositoryError("unknown", "admin_student_summary: unrecognised response")
+    return student
+  }
+
+  async listStudentGrants(userId: string): Promise<AdminGrantView[]> {
+    await this.requireUserId()
+    const response = await this.client()
+      .from("credit_grants")
+      .select(GRANT_COLUMNS)
+      .eq("user_id", userId)
+      .order("expires_at")
+      .order("id")
+      .limit(ROW_LIMIT)
+    return unwrap(response as unknown as Response<StudentGrantRow[]>, "credit_grants").map(toAdminGrantView)
+  }
+
+  async listStudentBookings(userId: string): Promise<StudentBookingView[]> {
+    await this.requireUserId()
+    const response = await this.client()
+      .from("bookings")
+      .select(STUDENT_BOOKING_COLUMNS)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .order("id")
+      .limit(ROW_LIMIT)
+    return unwrap(response as unknown as Response<StudentBookingRow[]>, "bookings")
+      .map(toStudentBookingView)
+      .filter((b): b is StudentBookingView => b !== null)
+  }
+
+  async listStudentLedger(userId: string): Promise<AdminLedgerEntry[]> {
+    await this.requireUserId()
+    const response = await this.client()
+      .from("credit_ledger")
+      .select(LEDGER_COLUMNS)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(ROW_LIMIT)
+    return unwrap(response as unknown as Response<LedgerRow[]>, "credit_ledger").map(toAdminLedgerEntry)
+  }
+
+  async grantCredits(cmd: GrantCreditsCommand): Promise<GrantCreditsResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("grant_credits", {
+      p_user_id: cmd.userId,
+      p_credits: cmd.credits,
+      p_valid_days: cmd.validDays,
+      p_note: cmd.note,
+      p_idempotency_key: cmd.requestKey,
+    })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapGrantCreditsRpc(response.data)
+  }
+
+  async adjustCredits(cmd: AdjustCreditsCommand): Promise<AdjustCreditsResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("admin_adjust_credits", {
+      p_grant_id: cmd.grantId,
+      p_delta: cmd.delta,
+      p_reason: cmd.reason,
+      p_request_key: cmd.requestKey,
+    })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapAdjustCreditsRpc(response.data)
+  }
+
+  async bookForStudent(cmd: BookForStudentCommand): Promise<BookForStudentResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("admin_book_for", {
+      p_user_id: cmd.userId,
+      p_session_id: cmd.sessionId,
+      p_request_key: cmd.requestKey,
+    })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapBookForStudentRpc(response.data)
+  }
+
+  async cancelForStudent(cmd: CancelForStudentCommand): Promise<CancelForStudentResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("admin_cancel_for", {
+      p_booking_id: cmd.bookingId,
+      p_refund: cmd.refund,
+    })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapCancelForStudentRpc(response.data)
   }
 
   /** Local session only (UX); the database re-checks auth.uid() and the role on every call. */

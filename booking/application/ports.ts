@@ -8,6 +8,7 @@ import type {
   BookingRejectionCode,
   CancellationCode,
   ClassType,
+  CreditLedgerReason,
   IsoDateTime,
   Modality,
   Session,
@@ -298,6 +299,147 @@ export type CancelSessionResult =
     }
   | { ok: false; code: CancelSessionCode }
 
+/* ---------- Admin (Phase 4.3, AD-08 … AD-10) ---------- */
+
+export interface StudentNextBooking {
+  bookingId: string
+  sessionId: string
+  startsAt: IsoDateTime
+  classTypeName: string
+}
+
+/**
+ * One student as the panel lists her. `balance` is computed by the server with the same definition
+ * book_session uses (`private.usable_balance`), never summed in the browser. Text is user-provided.
+ */
+export interface StudentSummary {
+  userId: string
+  displayName: string | null
+  /** Confirmed address only (null until confirmed). */
+  email: string | null
+  balance: number
+  /** Earliest expiry among packs that still have classes; null when none. */
+  nextExpiry: IsoDateTime | null
+  nextBooking: StudentNextBooking | null
+}
+
+/** One pack (credit grant) as staff see it. `note` is visible to the student too. */
+export interface AdminGrantView {
+  id: string
+  total: number
+  remaining: number
+  validFrom: IsoDateTime
+  /** Exclusive: the pack is no longer valid at this instant. */
+  expiresAt: IsoDateTime
+  note: string | null
+  createdAt: IsoDateTime
+}
+
+/** Who wrote a ledger entry: the studio (staff), the student herself, or a system job. */
+export type LedgerActor = "staff" | "student" | "system"
+
+/** Append-only ledger row (newest first in the UI). `note` is user-provided text, visible to the student. */
+export interface AdminLedgerEntry {
+  id: string
+  grantId: string
+  bookingId: string | null
+  reason: CreditLedgerReason
+  delta: number
+  note: string | null
+  actor: LedgerActor
+  createdAt: IsoDateTime
+}
+
+export type BookingSource = "student" | "waitlist" | "staff"
+
+/** One booking of a student, with the session it belongs to. */
+export interface StudentBookingView {
+  bookingId: string
+  sessionId: string
+  startsAt: IsoDateTime
+  endsAt: IsoDateTime
+  classTypeName: string
+  sessionStatus: Session["status"]
+  status: Booking["status"]
+  attendance: Booking["attendance"]
+  refunded: boolean
+  source: BookingSource
+  bookedAt: IsoDateTime
+}
+
+/** `grant_credits`: the pack is valid from today through local day `today + validDays − 1`. */
+export interface GrantCreditsCommand {
+  userId: string
+  credits: number
+  validDays: number
+  note: string | null
+  /** Generated once per form and reused on retries: the server replays instead of granting twice. */
+  requestKey: string
+}
+
+export type GrantCreditsCode = "not_found" | TransportCode
+
+export type GrantCreditsResult =
+  | { ok: true; grantId: string; credits: number; expiresAt: IsoDateTime; replayed: boolean }
+  | { ok: false; code: GrantCreditsCode }
+
+/** `admin_adjust_credits`: ± credits on one pack, with a mandatory reason (stored as the ledger note). */
+export interface AdjustCreditsCommand {
+  grantId: string
+  delta: number
+  reason: string
+  requestKey: string
+}
+
+/** Business refusals of `admin_adjust_credits` (application/RPC codes). */
+export const ADJUST_CREDITS_CODES = ["insufficient_balance", "adjust_exceeds_pack", "grant_expired", "not_found"] as const
+export type AdjustCreditsCode = (typeof ADJUST_CREDITS_CODES)[number] | TransportCode
+
+export type AdjustCreditsResult =
+  | { ok: true; grantId: string; delta: number; creditsRemaining: number; balance: number; replayed: boolean }
+  | { ok: false; code: AdjustCreditsCode; creditsRemaining?: number }
+
+/** `admin_book_for`: staff books a student; bypasses the booking window, never capacity. */
+export interface BookForStudentCommand {
+  userId: string
+  sessionId: string
+  requestKey: string
+}
+
+export const BOOK_FOR_STUDENT_CODES = [
+  "session_cancelled",
+  "session_started",
+  "already_booked",
+  "session_full",
+  "no_valid_credit",
+  "not_found",
+] as const
+export type BookForStudentCode = (typeof BOOK_FOR_STUDENT_CODES)[number] | TransportCode
+
+export type BookForStudentResult =
+  | { ok: true; bookingId: string; replayed: boolean; remainingCredits: number | null }
+  | { ok: false; code: BookForStudentCode }
+
+/** `admin_cancel_for`: staff cancels a student's booking at any time; refunds unless `refund` is false. */
+export interface CancelForStudentCommand {
+  bookingId: string
+  refund: boolean
+}
+
+export const CANCEL_FOR_STUDENT_CODES = ["cancellation_not_allowed", "not_found"] as const
+export type CancelForStudentCode = (typeof CANCEL_FOR_STUDENT_CODES)[number] | TransportCode
+
+export type CancelForStudentResult =
+  | {
+      ok: true
+      bookingId: string
+      refunded: boolean
+      /** The pack had already expired: nothing went back (staff grants it by hand). */
+      refundSkipped: boolean
+      replayed: boolean
+    }
+  | { ok: false; code: CancelForStudentCode }
+
 /**
  * Staff read/write side. Reads throw RepositoryError (`unauthenticated`, `forbidden`, …);
  * writes return business refusals as data. The database is the only authority (ADR-005).
@@ -318,4 +460,18 @@ export interface AdminRepository {
   updateSessionCapacity(cmd: UpdateSessionCapacityCommand): Promise<UpdateSessionResult>
   /** Cancels the session and every confirmed booking with a refund, regardless of the window. */
   cancelSession(cmd: CancelSessionCommand): Promise<CancelSessionResult>
+  /** Students whose name or email contains `query` (blank = everyone), alphabetical. */
+  searchStudents(query: string): Promise<StudentSummary[]>
+  /** Null for unknown ids and non-student profiles. */
+  getStudent(userId: string): Promise<StudentSummary | null>
+  /** Every pack of the student (any state). */
+  listStudentGrants(userId: string): Promise<AdminGrantView[]>
+  /** Every booking of the student (any status). */
+  listStudentBookings(userId: string): Promise<StudentBookingView[]>
+  /** The student's ledger, newest first. */
+  listStudentLedger(userId: string): Promise<AdminLedgerEntry[]>
+  grantCredits(cmd: GrantCreditsCommand): Promise<GrantCreditsResult>
+  adjustCredits(cmd: AdjustCreditsCommand): Promise<AdjustCreditsResult>
+  bookForStudent(cmd: BookForStudentCommand): Promise<BookForStudentResult>
+  cancelForStudent(cmd: CancelForStudentCommand): Promise<CancelForStudentResult>
 }

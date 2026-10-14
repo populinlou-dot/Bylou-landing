@@ -29,6 +29,7 @@ import {
   type BookingRepository,
   type CancelCommand,
   type CancelResult,
+  type BookingSource,
   type ClassTypeView,
   type Clock,
   type CreditBalance,
@@ -37,8 +38,9 @@ import {
   type SessionAvailability,
   type SessionPrivateDetails,
 } from "../../application"
-import { DEMO_USER_ID } from "./mock-auth"
+import { DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
 import { createDemoSeed, type DemoSeed } from "./demo-seed"
+import { appendLedger, type MockGrantMeta, type MockLedgerEntry } from "./mock-ledger"
 
 export interface MockBookingRepositoryOptions {
   clock: Clock
@@ -75,6 +77,12 @@ interface MockState extends DemoSeed {
   privateDetailsBySessionId: Record<string, SessionPrivateDetails>
   /** create_session request key → session ids (series replay). */
   seriesKeys: Map<string, string[]>
+  /** Append-only credit ledger (Phase 4.3), mirrors credit_ledger. */
+  ledger: MockLedgerEntry[]
+  /** Pack note / author / key by grant id (Phase 4.3). */
+  grantMeta: Record<string, MockGrantMeta>
+  /** bookings.source; absent = "student". */
+  bookingSources: Record<string, BookingSource>
 }
 
 /** The live in-memory studio shared with MockAdminRepository (mock only). */
@@ -89,6 +97,10 @@ export type MockStudio = Pick<
   | "classTypeSettings"
   | "privateDetailsBySessionId"
   | "seriesKeys"
+  | "keys"
+  | "ledger"
+  | "grantMeta"
+  | "bookingSources"
 > & { rules: StudioRules }
 
 /** Demo defaults for the seeded class types (all published). */
@@ -211,6 +223,15 @@ export class MockBookingRepository implements BookingRepository {
     }
     state.bookings.push(booking)
     state.keys.set(`${userId}|${cmd.idempotencyKey}`, booking.id)
+    appendLedger(state.ledger, {
+      userId,
+      grantId: grant.id,
+      bookingId: booking.id,
+      reason: "booking_debit",
+      delta: -this.options.rules.creditsPerBooking,
+      actorId: userId,
+      createdAt: booking.createdAt,
+    })
     return { ok: true, bookingId: booking.id, replayed: false, remainingCredits: this.balanceOf(userId).available }
   }
 
@@ -243,6 +264,15 @@ export class MockBookingRepository implements BookingRepository {
         grant.remaining += this.options.rules.creditsPerBooking
         state.refunded.add(booking.id)
         refunded = true
+        appendLedger(state.ledger, {
+          userId,
+          grantId: grant.id,
+          bookingId: booking.id,
+          reason: "cancel_refund",
+          delta: this.options.rules.creditsPerBooking,
+          actorId: userId,
+          createdAt: now.toISOString(),
+        })
       }
     }
     return { ok: true, bookingId: booking.id, status: booking.status, refunded, replayed: false }
@@ -264,6 +294,10 @@ export class MockBookingRepository implements BookingRepository {
       classTypeSettings: state.classTypeSettings,
       privateDetailsBySessionId: state.privateDetailsBySessionId,
       seriesKeys: state.seriesKeys,
+      keys: state.keys,
+      ledger: state.ledger,
+      grantMeta: state.grantMeta,
+      bookingSources: state.bookingSources,
       rules: this.options.rules,
     }
   }
@@ -304,6 +338,27 @@ export class MockBookingRepository implements BookingRepository {
         createdAt: new Date(toEpochMs(past.startsAt) - 2 * DAY_MS).toISOString(),
       })
     }
+    // The demo pack's ledger adds up to its remaining credits (8 granted, 1 used).
+    const ledger: MockLedgerEntry[] = []
+    appendLedger(ledger, {
+      userId: DEMO_USER_ID,
+      grantId: grant.id,
+      reason: "grant",
+      delta: grant.total,
+      actorId: DEMO_STAFF_ID,
+      note: "Pack demo",
+      createdAt: grant.grantedAt,
+    })
+    appendLedger(ledger, {
+      userId: DEMO_USER_ID,
+      grantId: grant.id,
+      bookingId: past ? "demo-booking-history" : null,
+      reason: past ? "booking_debit" : "admin_adjust",
+      delta: -1,
+      actorId: past ? DEMO_USER_ID : DEMO_STAFF_ID,
+      note: past ? null : "Clase tomada antes de usar la app (demo)",
+      createdAt: past ? new Date(toEpochMs(past.startsAt) - 2 * DAY_MS).toISOString() : grant.grantedAt,
+    })
     const classTypeSettings = Object.fromEntries(
       seed.classTypes.map((ct, index): [string, MockClassTypeSettings] => [
         ct.id,
@@ -318,6 +373,11 @@ export class MockBookingRepository implements BookingRepository {
       classTypeSettings,
       privateDetailsBySessionId: {},
       seriesKeys: new Map(),
+      ledger,
+      grantMeta: {
+        [grant.id]: { note: "Pack demo", createdAt: grant.grantedAt, grantedBy: DEMO_STAFF_ID, requestKey: "demo-grant-key" },
+      },
+      bookingSources: {},
     }
   }
 
@@ -336,7 +396,7 @@ export class MockBookingRepository implements BookingRepository {
         remaining: g.remaining,
         validFrom: g.grantedAt,
         expiresAt: g.expiresAt,
-        note: "Pack demo",
+        note: this.data().grantMeta[g.id]?.note ?? null,
       })),
     }
   }

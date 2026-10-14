@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import type { AuthPort, AuthUser, BookingRepository, BookingRuntime, Clock } from "../application"
 import type { CopyKey, TermKey } from "../config"
 import type { BrandConfig } from "../theme"
@@ -27,7 +27,14 @@ export function BookingProvider({ brand, runtime, children }: BookingContextValu
 
   useEffect(() => {
     if (runtime.status !== "ready") return
-    return runtime.auth.onChange((user) => setAuth(user ? { status: "signed_in", user } : { status: "signed_out" }))
+    // A transition, not an urgent update: the auth session usually resolves while the page's
+    // Suspense boundary is still hydrating (its chunk loads after the layout). An urgent context
+    // update into a dehydrated boundary makes React discard the server HTML and client-render it,
+    // which remounts the sign-in form (new useId ids, typed email lost). A transition lets
+    // hydration finish first, then applies the auth state.
+    return runtime.auth.onChange((user) =>
+      startTransition(() => setAuth(user ? { status: "signed_in", user } : { status: "signed_out" })),
+    )
   }, [runtime])
 
   return (

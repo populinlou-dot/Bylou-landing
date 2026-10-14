@@ -6,13 +6,38 @@
  * server contract: only the demo staff user (MockAuth, "staff@…") may read or write, attendance
  * follows the `mark_attendance` window (domain `attendanceWindow`), and the Phase 4.2 writes follow
  * `admin_upsert_class_type`, `create_session`, `admin_update_session` and `admin_cancel_session`
- * (same codes, same replay rules, all-or-nothing series).
+ * (same codes, same replay rules, all-or-nothing series). Phase 4.3 mirrors `admin_search_students`,
+ * `admin_student_summary`, `grant_credits`, `admin_adjust_credits`, `admin_book_for` and
+ * `admin_cancel_for`, writing the same append-only ledger rows (mock-ledger).
  */
-import { attendanceWindow, availability, toEpochMs, type Modality, type Session } from "../../domain"
+import {
+  attendanceWindow,
+  availability,
+  creditBalance,
+  isGrantUsableAt,
+  selectCreditGrant,
+  toEpochMs,
+  type CreditGrant,
+  type Modality,
+  type Session,
+} from "../../domain"
 import {
   RepositoryError,
   addDays,
+  localDateOf,
   zonedTimeToInstant,
+  type AdjustCreditsCommand,
+  type AdjustCreditsResult,
+  type AdminGrantView,
+  type AdminLedgerEntry,
+  type BookForStudentCommand,
+  type BookForStudentResult,
+  type CancelForStudentCommand,
+  type CancelForStudentResult,
+  type GrantCreditsCommand,
+  type GrantCreditsResult,
+  type StudentBookingView,
+  type StudentSummary,
   type AdminClassTypeView,
   type AdminRepository,
   type AdminSessionView,
@@ -34,6 +59,7 @@ import {
 } from "../../application"
 import { DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
 import type { MockBookingRepository } from "./mock-booking-repository"
+import { appendLedger } from "./mock-ledger"
 
 export interface MockAdminRepositoryOptions {
   clock: Clock
@@ -55,6 +81,10 @@ function demoProfile(userId: string): { displayName: string | null; email: strin
 }
 
 const MODALITIES: readonly Modality[] = ["in_person", "online"]
+const STUDENT_ID = /^demo-user-\d+$/
+const SEARCH_LIMIT = 50
+/** Case- and accent-insensitive comparison key for the demo search. */
+const fold = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 const inRange = (n: number, min: number, max: number) => Number.isInteger(n) && n >= min && n <= max
 const tooLong = (value: string | null, max: number) => value !== null && value.length > max
 
@@ -260,12 +290,329 @@ export class MockAdminRepository implements AdminRepository {
         grant.remaining += rules.creditsPerBooking
         refunded.add(booking.id)
         refundedCount++
+        appendLedger(this.state().ledger, {
+          userId: booking.userId,
+          grantId: grant.id,
+          bookingId: booking.id,
+          reason: "cancel_refund",
+          delta: rules.creditsPerBooking,
+          actorId: DEMO_STAFF_ID,
+          createdAt: new Date(nowMs).toISOString(),
+        })
       } else {
         refundsSkipped.push(booking.id)
       }
     }
     session.status = "cancelled"
     return { ok: true, sessionId: session.id, cancelledBookings, refunded: refundedCount, refundsSkipped, replayed: false }
+  }
+
+  /* ---------- Phase 4.3: students + credits ---------- */
+
+  async searchStudents(query: string): Promise<StudentSummary[]> {
+    await this.delay()
+    this.requireStaff()
+    const needle = fold(query.trim())
+    return this.studentIds()
+      .map((id) => this.summaryOf(id))
+      .filter((s) => !needle || [s.displayName, s.email].some((text) => text !== null && fold(text).includes(needle)))
+      .sort((a, b) => this.sortLabel(a).localeCompare(this.sortLabel(b), "es") || (a.userId < b.userId ? -1 : 1))
+      .slice(0, SEARCH_LIMIT)
+  }
+
+  async getStudent(userId: string): Promise<StudentSummary | null> {
+    await this.delay()
+    this.requireStaff()
+    return this.isStudent(userId) ? this.summaryOf(userId) : null
+  }
+
+  async listStudentGrants(userId: string): Promise<AdminGrantView[]> {
+    await this.delay()
+    this.requireStaff()
+    const { grants, grantMeta } = this.state()
+    return grants
+      .filter((g) => g.userId === userId)
+      .map((g) => ({
+        id: g.id,
+        total: g.total,
+        remaining: g.remaining,
+        validFrom: g.grantedAt,
+        expiresAt: g.expiresAt,
+        note: grantMeta[g.id]?.note ?? null,
+        createdAt: grantMeta[g.id]?.createdAt ?? g.grantedAt,
+      }))
+  }
+
+  async listStudentBookings(userId: string): Promise<StudentBookingView[]> {
+    await this.delay()
+    this.requireStaff()
+    const { bookings, sessions, classTypes, refunded, bookingSources } = this.state()
+    return bookings
+      .filter((b) => b.userId === userId)
+      .flatMap((b): StudentBookingView[] => {
+        const session = sessions.find((s) => s.id === b.sessionId)
+        if (!session) return []
+        return [
+          {
+            bookingId: b.id,
+            sessionId: session.id,
+            startsAt: session.startsAt,
+            endsAt: session.endsAt,
+            classTypeName: classTypes.find((ct) => ct.id === session.classTypeId)?.name ?? "—",
+            sessionStatus: session.status,
+            status: b.status,
+            attendance: b.attendance,
+            refunded: refunded.has(b.id),
+            source: bookingSources[b.id] ?? "student",
+            bookedAt: b.createdAt,
+          },
+        ]
+      })
+  }
+
+  async listStudentLedger(userId: string): Promise<AdminLedgerEntry[]> {
+    await this.delay()
+    this.requireStaff()
+    return this.state()
+      .ledger.filter((e) => e.userId === userId)
+      .map((e): AdminLedgerEntry => ({
+        id: e.id,
+        grantId: e.grantId,
+        bookingId: e.bookingId,
+        reason: e.reason,
+        delta: e.delta,
+        note: e.note,
+        actor: e.actorId === null ? "system" : e.actorId === e.userId ? "student" : "staff",
+        createdAt: e.createdAt,
+      }))
+      .reverse()
+  }
+
+  async grantCredits(cmd: GrantCreditsCommand): Promise<GrantCreditsResult> {
+    await this.delay()
+    const denied = this.writeDenied()
+    if (denied) return { ok: false, code: denied }
+    if (!inRange(cmd.credits, 1, 100) || !inRange(cmd.validDays, 1, 365) || tooLong(cmd.note, 200)) {
+      return { ok: false, code: "invalid_input" }
+    }
+    const state = this.state()
+    const prior = Object.entries(state.grantMeta).find(([, meta]) => meta.requestKey === cmd.requestKey)
+    if (prior) {
+      const grant = state.grants.find((g) => g.id === prior[0])
+      if (!grant || grant.userId !== cmd.userId || grant.total !== cmd.credits) return { ok: false, code: "invalid_input" }
+      return { ok: true, grantId: grant.id, credits: grant.total, expiresAt: grant.expiresAt, replayed: true }
+    }
+    if (!this.isStudent(cmd.userId)) return { ok: false, code: "not_found" }
+    const now = this.options.clock.now()
+    const tz = state.rules.timezone
+    const grant: CreditGrant = {
+      id: `demo-grant-new-${++this.sequence}`,
+      userId: cmd.userId,
+      total: cmd.credits,
+      remaining: cmd.credits,
+      grantedAt: now.toISOString(),
+      // Valid through local day today + validDays − 1, exactly like grant_credits.
+      expiresAt: zonedTimeToInstant(addDays(localDateOf(now, tz), cmd.validDays), "00:00", tz).toISOString(),
+    }
+    state.grants.push(grant)
+    state.grantMeta[grant.id] = { note: cmd.note, createdAt: grant.grantedAt, grantedBy: DEMO_STAFF_ID, requestKey: cmd.requestKey }
+    appendLedger(state.ledger, {
+      userId: cmd.userId,
+      grantId: grant.id,
+      reason: "grant",
+      delta: cmd.credits,
+      actorId: DEMO_STAFF_ID,
+      note: cmd.note,
+      createdAt: grant.grantedAt,
+    })
+    return { ok: true, grantId: grant.id, credits: grant.total, expiresAt: grant.expiresAt, replayed: false }
+  }
+
+  async adjustCredits(cmd: AdjustCreditsCommand): Promise<AdjustCreditsResult> {
+    await this.delay()
+    const denied = this.writeDenied()
+    if (denied) return { ok: false, code: denied }
+    const reason = cmd.reason.trim()
+    if (cmd.delta === 0 || !inRange(cmd.delta, -100, 100) || reason.length < 1 || reason.length > 200) {
+      return { ok: false, code: "invalid_input" }
+    }
+    const state = this.state()
+    const prior = state.ledger.find((e) => e.actorId === DEMO_STAFF_ID && e.requestKey === cmd.requestKey)
+    if (prior) {
+      if (prior.grantId !== cmd.grantId || prior.delta !== cmd.delta) return { ok: false, code: "invalid_input" }
+      const grant = state.grants.find((g) => g.id === prior.grantId)
+      return {
+        ok: true,
+        grantId: prior.grantId,
+        delta: prior.delta,
+        creditsRemaining: grant?.remaining ?? 0,
+        balance: this.summaryOf(prior.userId).balance,
+        replayed: true,
+      }
+    }
+    const grant = state.grants.find((g) => g.id === cmd.grantId)
+    if (!grant) return { ok: false, code: "not_found" }
+    const now = this.options.clock.now()
+    if (toEpochMs(grant.expiresAt) <= now.getTime()) return { ok: false, code: "grant_expired" }
+    if (grant.remaining + cmd.delta < 0) return { ok: false, code: "insufficient_balance", creditsRemaining: grant.remaining }
+    // Room is kept for credits still held by confirmed bookings (a later refund must fit in the pack).
+    const held = state.bookings.filter((b) => b.creditGrantId === grant.id && b.status === "confirmed").length * state.rules.creditsPerBooking
+    if (grant.remaining + cmd.delta > grant.total - held) {
+      return { ok: false, code: "adjust_exceeds_pack", creditsRemaining: grant.remaining }
+    }
+    grant.remaining += cmd.delta
+    appendLedger(state.ledger, {
+      userId: grant.userId,
+      grantId: grant.id,
+      reason: "admin_adjust",
+      delta: cmd.delta,
+      actorId: DEMO_STAFF_ID,
+      note: reason,
+      requestKey: cmd.requestKey,
+      createdAt: now.toISOString(),
+    })
+    return {
+      ok: true,
+      grantId: grant.id,
+      delta: cmd.delta,
+      creditsRemaining: grant.remaining,
+      balance: this.summaryOf(grant.userId).balance,
+      replayed: false,
+    }
+  }
+
+  async bookForStudent(cmd: BookForStudentCommand): Promise<BookForStudentResult> {
+    await this.delay()
+    const denied = this.writeDenied()
+    if (denied) return { ok: false, code: denied }
+    const state = this.state()
+    const priorId = state.keys.get(`${cmd.userId}|${cmd.requestKey}`)
+    if (priorId) {
+      const prior = state.bookings.find((b) => b.id === priorId)
+      if (!prior || prior.sessionId !== cmd.sessionId) return { ok: false, code: "invalid_input" }
+      return { ok: true, bookingId: prior.id, replayed: true, remainingCredits: this.summaryOf(cmd.userId).balance }
+    }
+    if (!this.isStudent(cmd.userId)) return { ok: false, code: "not_found" }
+    const session = state.sessions.find((x) => x.id === cmd.sessionId)
+    if (!session) return { ok: false, code: "not_found" }
+    const now = this.options.clock.now()
+    if (session.status === "cancelled") return { ok: false, code: "session_cancelled" }
+    if (now.getTime() >= toEpochMs(session.startsAt)) return { ok: false, code: "session_started" }
+    // AD-10: the booking window is deliberately not checked; capacity is.
+    const sessionBookings = state.bookings.filter((b) => b.sessionId === session.id)
+    if (sessionBookings.some((b) => b.userId === cmd.userId && b.status === "confirmed")) return { ok: false, code: "already_booked" }
+    if (availability(session, state.bookings).isFull) return { ok: false, code: "session_full" }
+    const perBooking = state.rules.creditsPerBooking
+    const usableNow = state.grants.filter((g) => g.userId === cmd.userId && toEpochMs(g.grantedAt) <= now.getTime())
+    const grant = selectCreditGrant(usableNow, session.startsAt, perBooking)
+    if (!grant) return { ok: false, code: "no_valid_credit" }
+    grant.remaining -= perBooking
+    const booking = {
+      id: `demo-booking-staff-${++this.sequence}`,
+      sessionId: session.id,
+      userId: cmd.userId,
+      status: "confirmed" as const,
+      attendance: "unknown" as const,
+      idempotencyKey: cmd.requestKey,
+      creditGrantId: grant.id,
+      createdAt: now.toISOString(),
+    }
+    state.bookings.push(booking)
+    state.keys.set(`${cmd.userId}|${cmd.requestKey}`, booking.id)
+    state.bookingSources[booking.id] = "staff"
+    appendLedger(state.ledger, {
+      userId: cmd.userId,
+      grantId: grant.id,
+      bookingId: booking.id,
+      reason: "booking_debit",
+      delta: -perBooking,
+      actorId: DEMO_STAFF_ID,
+      createdAt: booking.createdAt,
+    })
+    return { ok: true, bookingId: booking.id, replayed: false, remainingCredits: this.summaryOf(cmd.userId).balance }
+  }
+
+  async cancelForStudent(cmd: CancelForStudentCommand): Promise<CancelForStudentResult> {
+    await this.delay()
+    const denied = this.writeDenied()
+    if (denied) return { ok: false, code: denied }
+    const state = this.state()
+    const booking = state.bookings.find((b) => b.id === cmd.bookingId)
+    if (!booking) return { ok: false, code: "not_found" }
+    if (booking.status !== "confirmed") {
+      return { ok: true, bookingId: booking.id, refunded: state.refunded.has(booking.id), refundSkipped: false, replayed: true }
+    }
+    if (booking.attendance !== "unknown") return { ok: false, code: "cancellation_not_allowed" }
+    booking.status = "cancelled"
+    const now = this.options.clock.now()
+    let refunded = false
+    let refundSkipped = false
+    if (cmd.refund && booking.creditGrantId !== null) {
+      const grant = state.grants.find((g) => g.id === booking.creditGrantId)
+      if (grant && toEpochMs(grant.expiresAt) > now.getTime()) {
+        grant.remaining += state.rules.creditsPerBooking
+        state.refunded.add(booking.id)
+        refunded = true
+        appendLedger(state.ledger, {
+          userId: booking.userId,
+          grantId: grant.id,
+          bookingId: booking.id,
+          reason: "cancel_refund",
+          delta: state.rules.creditsPerBooking,
+          actorId: DEMO_STAFF_ID,
+          createdAt: now.toISOString(),
+        })
+      } else {
+        refundSkipped = true
+      }
+    }
+    return { ok: true, bookingId: booking.id, refunded, refundSkipped, replayed: false }
+  }
+
+  /** Demo students: the demo student, every fictional booker and anyone holding a pack (never staff). */
+  private studentIds(): string[] {
+    const { bookings, grants } = this.state()
+    const ids = new Set<string>([DEMO_USER_ID])
+    for (const b of bookings) if (STUDENT_ID.test(b.userId)) ids.add(b.userId)
+    for (const g of grants) if (g.userId !== DEMO_STAFF_ID) ids.add(g.userId)
+    return [...ids]
+  }
+
+  private isStudent(userId: string): boolean {
+    return this.studentIds().includes(userId)
+  }
+
+  private sortLabel(summary: StudentSummary): string {
+    return (summary.displayName?.trim() || summary.email || "\uffff").toLowerCase()
+  }
+
+  /** Same definitions as private.student_summary: usable balance now, next expiry, next booking. */
+  private summaryOf(userId: string): StudentSummary {
+    const { grants, bookings, sessions, classTypes } = this.state()
+    const now = this.options.clock.now()
+    const own = grants.filter((g) => g.userId === userId && toEpochMs(g.grantedAt) <= now.getTime())
+    const active = own.filter((g) => isGrantUsableAt(g, now.getTime(), 1)).sort((a, b) => toEpochMs(a.expiresAt) - toEpochMs(b.expiresAt))
+    const next = bookings
+      .filter((b) => b.userId === userId && b.status === "confirmed")
+      .map((b) => ({ booking: b, session: sessions.find((s) => s.id === b.sessionId) }))
+      .filter((x): x is { booking: (typeof bookings)[number]; session: Session } =>
+        Boolean(x.session && x.session.status === "scheduled" && toEpochMs(x.session.endsAt) > now.getTime()),
+      )
+      .sort((a, b) => toEpochMs(a.session.startsAt) - toEpochMs(b.session.startsAt))[0]
+    return {
+      userId,
+      ...demoProfile(userId),
+      balance: creditBalance(own, now),
+      nextExpiry: active[0]?.expiresAt ?? null,
+      nextBooking: next
+        ? {
+            bookingId: next.booking.id,
+            sessionId: next.session.id,
+            startsAt: next.session.startsAt,
+            classTypeName: classTypes.find((ct) => ct.id === next.session.classTypeId)?.name ?? "—",
+          }
+        : null,
+    }
   }
 
   private state() {

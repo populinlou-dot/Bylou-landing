@@ -2,7 +2,11 @@
 import type { Session, StudioRules } from "../domain"
 import type {
   AdminClassTypeView,
+  AdminGrantView,
+  AdminLedgerEntry,
   AdminRepository,
+  StudentBookingView,
+  StudentSummary,
   AdminSessionView,
   AuthPort,
   AuthUser,
@@ -240,6 +244,68 @@ export interface FakeAdminOptions {
   sessions?: AdminSessionView[]
   roster?: Record<string, RosterEntry[]>
   classTypes?: AdminClassTypeView[]
+  students?: StudentSummary[]
+  grants?: Record<string, AdminGrantView[]>
+  studentBookings?: Record<string, StudentBookingView[]>
+  ledger?: Record<string, AdminLedgerEntry[]>
+}
+
+/* ---------- Phase 4.3 fixtures (students + credits) ---------- */
+
+export function studentSummary(id: string, overrides: Partial<StudentSummary> = {}): StudentSummary {
+  return {
+    userId: id,
+    displayName: `Alumna ${id}`,
+    email: `${id}@example.test`,
+    balance: 3,
+    nextExpiry: "2026-11-12T03:00:00.000Z",
+    nextBooking: null,
+    ...overrides,
+  }
+}
+
+export function grantView(id: string, overrides: Partial<AdminGrantView> = {}): AdminGrantView {
+  return {
+    id,
+    total: 4,
+    remaining: 3,
+    validFrom: "2026-10-01T03:00:00.000Z",
+    expiresAt: "2026-11-12T03:00:00.000Z",
+    note: null,
+    createdAt: "2026-10-01T12:00:00.000Z",
+    ...overrides,
+  }
+}
+
+export function studentBooking(id: string, startsAt: string, overrides: Partial<StudentBookingView> = {}): StudentBookingView {
+  return {
+    bookingId: id,
+    sessionId: `s-${id}`,
+    startsAt,
+    endsAt: new Date(Date.parse(startsAt) + 60 * 60_000).toISOString(),
+    classTypeName: "Clase grupal",
+    sessionStatus: "scheduled",
+    status: "confirmed",
+    attendance: "unknown",
+    refunded: false,
+    source: "student",
+    bookedAt: "2026-10-10T12:00:00.000Z",
+    ...overrides,
+  }
+}
+
+export function ledgerEntry(id: string, overrides: Partial<AdminLedgerEntry> = {}): AdminLedgerEntry {
+  return {
+    id,
+    grantId: "g-1",
+    bookingId: null,
+    reason: "grant",
+    delta: 4,
+    note: null,
+    actor: "staff",
+    createdAt: "2026-10-01T12:00:00.000Z",
+    ...overrides,
+  }
 }
 
 /**
@@ -249,6 +315,7 @@ export interface FakeAdminOptions {
 export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminRepository & { calls: string[] } {
   const calls: string[] = []
   const sessions = options.sessions ?? []
+  const students = options.students ?? []
   return {
     calls,
     async getMyRole() {
@@ -292,6 +359,43 @@ export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminReposi
       calls.push(`cancelSession ${cmd.sessionId}`)
       const cancelledBookings = sessions.find((s) => s.session.id === cmd.sessionId)?.confirmedCount ?? 0
       return { ok: true, sessionId: cmd.sessionId, cancelledBookings, refunded: cancelledBookings, refundsSkipped: [], replayed: false }
+    },
+    async searchStudents(query) {
+      calls.push(`searchStudents ${query}`)
+      const needle = query.toLowerCase()
+      return students.filter((s) => !needle || `${s.displayName ?? ""} ${s.email ?? ""}`.toLowerCase().includes(needle))
+    },
+    async getStudent(userId) {
+      calls.push(`getStudent ${userId}`)
+      return students.find((s) => s.userId === userId) ?? null
+    },
+    async listStudentGrants(userId) {
+      calls.push(`listStudentGrants ${userId}`)
+      return options.grants?.[userId] ?? []
+    },
+    async listStudentBookings(userId) {
+      calls.push(`listStudentBookings ${userId}`)
+      return options.studentBookings?.[userId] ?? []
+    },
+    async listStudentLedger(userId) {
+      calls.push(`listStudentLedger ${userId}`)
+      return options.ledger?.[userId] ?? []
+    },
+    async grantCredits(cmd) {
+      calls.push(`grantCredits ${cmd.userId} ${cmd.credits} ${cmd.validDays} ${cmd.requestKey}`)
+      return { ok: true, grantId: "g-new", credits: cmd.credits, expiresAt: "2026-11-13T03:00:00.000Z", replayed: false }
+    },
+    async adjustCredits(cmd) {
+      calls.push(`adjustCredits ${cmd.grantId} ${cmd.delta} ${cmd.requestKey}`)
+      return { ok: true, grantId: cmd.grantId, delta: cmd.delta, creditsRemaining: 3 + cmd.delta, balance: 3 + cmd.delta, replayed: false }
+    },
+    async bookForStudent(cmd) {
+      calls.push(`bookForStudent ${cmd.userId} ${cmd.sessionId} ${cmd.requestKey}`)
+      return { ok: true, bookingId: `b-${cmd.sessionId}`, replayed: false, remainingCredits: 2 }
+    },
+    async cancelForStudent(cmd) {
+      calls.push(`cancelForStudent ${cmd.bookingId} ${cmd.refund}`)
+      return { ok: true, bookingId: cmd.bookingId, refunded: cmd.refund, refundSkipped: false, replayed: false }
     },
   }
 }

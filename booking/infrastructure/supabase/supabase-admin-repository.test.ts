@@ -214,4 +214,87 @@ describe("SupabaseAdminRepository", () => {
     await expect(repo.listClassTypes()).rejects.toMatchObject({ code: "unauthenticated" })
     expect(anon.log).toEqual([])
   })
+
+  /* ---------- Phase 4.3: students + credits ---------- */
+
+  it("searchStudents: staff read RPC (server-computed balance); blank query → null", async () => {
+    const student = { user_id: "u2", display_name: "Ana", email: null, balance: 2, next_expiry: null, next_booking: null }
+    const { log, provider } = fakeClient({ userId: "u1", rpc: { data: { ok: true, students: [student] }, error: null, status: 200 } })
+    const repo = new SupabaseAdminRepository(provider)
+    expect(await repo.searchStudents("ana")).toEqual([
+      { userId: "u2", displayName: "Ana", email: null, balance: 2, nextExpiry: null, nextBooking: null },
+    ])
+    await repo.searchStudents("")
+    expect(log).toEqual([
+      'rpc(admin_search_students, {"p_query":"ana","p_limit":50})',
+      'rpc(admin_search_students, {"p_query":null,"p_limit":50})',
+    ])
+  })
+
+  it("searchStudents: forbidden and unrecognised envelopes throw", async () => {
+    const denied = fakeClient({ userId: "u1", rpc: { data: null, error: { code: "42501", message: "forbidden" }, status: 403 } })
+    await expect(new SupabaseAdminRepository(denied.provider).searchStudents("x")).rejects.toMatchObject({ code: "forbidden" })
+    const junk = fakeClient({ userId: "u1", rpc: { data: { ok: true }, error: null, status: 200 } })
+    await expect(new SupabaseAdminRepository(junk.provider).searchStudents("x")).rejects.toMatchObject({ code: "unknown" })
+  })
+
+  it("getStudent: not_found and a malformed id → null", async () => {
+    const missing = fakeClient({ userId: "u1", rpc: { data: { ok: false, code: "not_found" }, error: null, status: 200 } })
+    expect(await new SupabaseAdminRepository(missing.provider).getStudent("u2")).toBeNull()
+    expect(missing.log).toEqual(['rpc(admin_student_summary, {"p_user_id":"u2"})'])
+    const malformed = fakeClient({ userId: "u1", rpc: { data: null, error: { code: "22P02", message: "bad uuid" }, status: 400 } })
+    expect(await new SupabaseAdminRepository(malformed.provider).getStudent("x")).toBeNull()
+  })
+
+  it("packs, bookings and ledger: RLS table reads scoped to the student, explicit columns", async () => {
+    const { log, provider } = fakeClient({ userId: "u1" })
+    const repo = new SupabaseAdminRepository(provider)
+    await repo.listStudentGrants("u2")
+    await repo.listStudentBookings("u2")
+    await repo.listStudentLedger("u2")
+    expect(log.filter((l) => l.startsWith("from("))).toEqual(["from(credit_grants)", "from(bookings)", "from(credit_ledger)"])
+    expect(log.filter((l) => l === 'eq("user_id", "u2")')).toHaveLength(3)
+    expect(log.filter((l) => l.startsWith("select(")).every((l) => !l.includes("*"))).toBe(true)
+    expect(log).toContain('select("id, user_id, grant_id, booking_id, reason, delta, note, actor_id, created_at")')
+  })
+
+  it("write RPCs carry snake_case args and the request key", async () => {
+    const grant = fakeClient({
+      userId: "u1",
+      rpc: { data: { ok: true, grant_id: "g", credits: 4, expires_at: "2026-11-13T03:00:00+00:00", replayed: false }, error: null, status: 200 },
+    })
+    await new SupabaseAdminRepository(grant.provider).grantCredits({ userId: "u2", credits: 4, validDays: 30, note: null, requestKey: "k" })
+    expect(grant.log).toEqual(['rpc(grant_credits, {"p_user_id":"u2","p_credits":4,"p_valid_days":30,"p_note":null,"p_idempotency_key":"k"})'])
+
+    const adjust = fakeClient({ userId: "u1", rpc: { data: { ok: false, code: "insufficient_balance", credits_remaining: 0 }, error: null, status: 200 } })
+    expect(await new SupabaseAdminRepository(adjust.provider).adjustCredits({ grantId: "g", delta: -1, reason: "x", requestKey: "k" })).toEqual({
+      ok: false,
+      code: "insufficient_balance",
+      creditsRemaining: 0,
+    })
+    expect(adjust.log).toEqual(['rpc(admin_adjust_credits, {"p_grant_id":"g","p_delta":-1,"p_reason":"x","p_request_key":"k"})'])
+
+    const book = fakeClient({ userId: "u1", rpc: { data: { ok: false, code: "session_full" }, error: null, status: 200 } })
+    expect(await new SupabaseAdminRepository(book.provider).bookForStudent({ userId: "u2", sessionId: "s", requestKey: "k" })).toEqual({
+      ok: false,
+      code: "session_full",
+    })
+    expect(book.log).toEqual(['rpc(admin_book_for, {"p_user_id":"u2","p_session_id":"s","p_request_key":"k"})'])
+
+    const cancel = fakeClient({
+      userId: "u1",
+      rpc: { data: { ok: true, booking_id: "b", refunded: true, refund_skipped: false, replayed: false }, error: null, status: 200 },
+    })
+    expect(await new SupabaseAdminRepository(cancel.provider).cancelForStudent({ bookingId: "b", refund: true })).toMatchObject({ ok: true })
+    expect(cancel.log).toEqual(['rpc(admin_cancel_for, {"p_booking_id":"b","p_refund":true})'])
+  })
+
+  it("Phase 4.3 writes are unauthenticated without a session and make no call", async () => {
+    const anon = fakeClient({ userId: null })
+    const repo = new SupabaseAdminRepository(anon.provider)
+    expect(await repo.adjustCredits({ grantId: "g", delta: 1, reason: "x", requestKey: "k" })).toEqual({ ok: false, code: "unauthenticated" })
+    expect(await repo.bookForStudent({ userId: "u", sessionId: "s", requestKey: "k" })).toEqual({ ok: false, code: "unauthenticated" })
+    await expect(repo.searchStudents("x")).rejects.toMatchObject({ code: "unauthenticated" })
+    expect(anon.log).toEqual([])
+  })
 })

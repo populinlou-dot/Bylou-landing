@@ -66,6 +66,27 @@ export class Actor {
     return rows[0].r
   }
 
+  /** Staff-only RPC (AD-10): book a student into a session, bypassing the booking window. */
+  async bookFor(userId: string, sessionId: string, key: string = randomUUID()): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.admin_book_for($1, $2, $3) as r", [
+      userId,
+      sessionId,
+      key,
+    ])
+    return rows[0].r
+  }
+
+  /** Staff-only RPC (AD-08.2): ± credits on one pack with a reason. */
+  async adjust(grantId: string, delta: number, key: string = randomUUID()): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.admin_adjust_credits($1, $2, $3, $4) as r", [
+      grantId,
+      delta,
+      "race test",
+      key,
+    ])
+    return rows[0].r
+  }
+
   end(): Promise<void> {
     return this.client.end()
   }

@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 4.2 (class types, sessions, weekly series, capacity, cancel) — DONE.** Next: Phase 4.3 (students + credits). Phase 4.1 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 4.3 (students + credits + sign-in fix) — DONE.** Next: Phase 4.4 waitlist (blocked on owner promotion rule), then Phase 5. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -23,6 +23,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | **Phase 4.1** admin shell, Hoy, roster, attendance (ADR-015) | frontend engineer | `app/admin/**`, `booking/admin/**`, `app/_booking/`, pgTAP `06` | done: unit 346/346, pgTAP 237/237, races 6/6; orchestrator browser E2E vs local Supabase: anon → sign-in link, staff → Hoy + roster, attendance `no_show` persisted, student → "Sin acceso" |
 
 | **Phase 4.2** class types, sessions, weekly series, capacity, cancel (ADR-016) | frontend + backend engineer | `20261014000900_admin_sessions.sql`, `app/admin/{practicas,nueva-clase}`, `booking/admin/**` | done: unit 411/411, pgTAP 306/306, races 7/7, db lint clean; orchestrator browser E2E vs local Supabase: 4-week series created at 09:30 ART, capacity 2→6, cancel → `cancelled`, other occurrences untouched |
+| **Phase 4.3** students search, grant pack, adjust with reason, book/cancel on behalf, sign-in remount fix (ADR-017) | frontend + backend engineer | `20261014001000_admin_students_credits.sql`, `app/admin/{alumnas,alumna}`, `booking/admin/students/**` | done: unit 459/459, pgTAP 396/396, races 9/9, db lint clean; security review 0 blocker/high, M1 (adjust cap vs held debits) fixed; orchestrator browser E2E vs local Supabase at phone width: search, grant 9→13, cancel-for 13→14 refunded with staff actor, ledger sum = balance, email kept when typed right after load |
 
 Phase 0 workstreams:
 
@@ -69,9 +70,9 @@ Carried over from a previous local setup session; intentionally left uncommitted
 
 ## UX backlog (observed in browser E2E)
 
-- Sign-in: email typed right after page load is sometimes wiped (input remounts); dev console shows a `useId` hydration mismatch on the sign-in form. Fix before release.
-- Admin new-session form: modality radios expose `in_person`/`online` as accessible names; use the visible labels.
-- Flaky test: `booking/ui/sign-in/sign-in.test.tsx` "goes email → code → returnTo" focus assertion fails ~2/15 full runs (pre-existing).
+- ~~Sign-in: email typed right after page load is sometimes wiped; `useId` hydration mismatch~~ → fixed in 4.3 (auth state update in a transition + adopt pre-hydration input; regression test `sign-in-hydration.test.tsx`).
+- ~~Admin new-session form: modality radios named `in_person`/`online`~~ → fixed in 4.3 (`RadioGroupField`, aria-labelledby on the visible text).
+- ~~Flaky sign-in focus test~~ → focus moves in a layout effect (4.3).
 - Agenda card for a past session the student attended says "Ya tenés esta clase reservada"; should read as attended/past.
 - After booking from the agenda, the card behind the sheet still shows the old spots count until refresh.
 - Modality filter + remembered filter (PRD ST-01 AC4) pending.
@@ -84,6 +85,9 @@ Carried over from a previous local setup session; intentionally left uncommitted
 - [ ] Account erasure: anonymize procedure (FKs are `ON DELETE RESTRICT`).
 - [ ] Admin UI must escape `display_name`; never put staff-only comments in credit notes (students can read their own notes).
 - [ ] Never run `supabase/seed.sql` against a hosted project.
+- [ ] Review lows (4.3): `admin_cancel_for` can refund after the session ended when attendance is unknown (documented AD-10 override; consider a reason or a time guard); no ledger audit row when a refund is skipped or `p_refund=false`; concurrent class types with the same name → raw 23505; `admin_book_for` allowed on unpublished sessions (documented).
+- [ ] Adjust cap counts attended bookings as held, so a fully used pack cannot get a "+" adjustment (grant a new pack instead). Tell Lou.
+- [ ] `npx pnpm@9 run test:db` leaves `race-*` users in the local DB; run `supabase db reset` afterwards.
 - [ ] `.env.example`: writing `.env*` files is blocked by the current permission settings. Owner to allow or create it (content: `NEXT_PUBLIC_BOOKING_DATA_SOURCE`, `NEXT_PUBLIC_BOOKING_BRAND`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BASE_PATH`, all empty, public values only).
 
 ## Blockers / decisions needing human input
@@ -99,7 +103,7 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 ## Next step
 
 1. **Owner:** follow `docs/booking/SUPABASE_SETUP.md`; send back only the project ref + checklist (never keys).
-2. ~~Phase 4.1~~, ~~4.2~~ done. **Phase 4.3** students + credits: search, grant pack (UI over `grant_credits`), `admin_adjust_credits` with reason, ledger view, book/cancel on behalf (AD-08…AD-10).
+2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~ done. **Phase 4.4** waitlist: needs the owner's promotion rule (proposed: FIFO; auto-promote only with a valid pack and >24 h before start; otherwise skip). Then the credit-expiry job and Phase 5.
 3. **Phase 4.2** waitlist (FIFO, Bylou deny policy) + credit-expiry job (pg_cron) — needs owner answer on auto-promotion.
 4. Fix UX backlog items above.
 

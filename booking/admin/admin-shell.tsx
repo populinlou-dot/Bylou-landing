@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { ReactNode } from "react"
-import { ADMIN_CLASS_TYPES_PATH, ADMIN_PATH } from "../application"
+import { ADMIN_CLASS_TYPES_PATH, ADMIN_PATH, ADMIN_STUDENTS_PATH } from "../application"
 import { useAuthState, useBooking, useCopy, useReadyRuntime } from "../ui/booking-context"
 import { DemoBanner } from "../ui/demo-banner"
 import { BookingRuntimeGate } from "../ui/runtime-gate"
@@ -52,12 +52,15 @@ function AdminAccountNav() {
   const linkClass =
     "inline-flex min-h-11 items-center rounded-full px-2 text-[14.5px] font-semibold text-primary underline-offset-4 hover:underline"
   return (
-    <nav className="flex items-center gap-1 sm:gap-3">
+    <nav className="flex flex-wrap items-center justify-end gap-x-1 sm:gap-x-3">
       <Link href={ADMIN_PATH} className={linkClass}>
         {t("admin.nav.today")}
       </Link>
       <Link href={ADMIN_CLASS_TYPES_PATH} className={linkClass}>
         {t("admin.nav.classTypes")}
+      </Link>
+      <Link href={ADMIN_STUDENTS_PATH} className={linkClass}>
+        {t("admin.nav.students")}
       </Link>
       {auth.status === "signed_in" ? (
         <button type="button" className={linkClass} onClick={() => void authPort.signOut()}>

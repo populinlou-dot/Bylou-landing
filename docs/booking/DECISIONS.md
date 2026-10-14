@@ -121,3 +121,15 @@ The `domain` purity rule is enforced by an automated test that scans imports (ES
 - Location rules (in-person needs an address, online needs an https link) are enforced by the application and UI only, because staff are the only writers and tightening `create_session` would break the seed and pgTAP 04.
 - The admin UI sends no cancellation reason: ledger notes are readable by students. Students are not notified automatically (no email in MVP).
 - Capacity edits are refused from the session start onward.
+
+## ADR-017 — Students + credits (Phase 4.3)
+**Accepted.**
+- New migration `20261014001000_admin_students_credits.sql`. Staff-only RPCs (all `SECURITY DEFINER`, `search_path = ''`, `private.assert_staff()` first, EXECUTE to `authenticated` only): `admin_search_students(p_query, p_limit)`, `admin_student_summary(p_user_id)`, `admin_adjust_credits(p_grant_id, p_delta, p_reason, p_request_key)`, `admin_book_for(p_user_id, p_session_id, p_request_key)`, `admin_cancel_for(p_booking_id, p_refund default true)`.
+- **Balance is server-computed** (exception to ADR-015's "plain reads"): the list and the detail show `private.usable_balance` through the two read RPCs, so the panel can never disagree with what `book_session` accepts. Packs, bookings and the ledger stay plain RLS reads.
+- **Adjustments are per pack**: `0 ≤ remaining + delta ≤ credits_total − credits held by the pack's confirmed bookings` (`insufficient_balance` / `adjust_exceeds_pack`), read under the grant lock, so a later refund (`cancel_booking`, `admin_cancel_for`, `admin_cancel_session`) always fits the `grants_remaining_bounds` CHECK; expired packs → `grant_expired`. No pack, therefore no usable balance, can go negative. More classes than the pack size = grant a new pack. The reason is required and stored as the ledger note (students can read it; the UI warns).
+- Adjustment idempotency: new column `credit_ledger.request_key` (only on `admin_adjust`, unique per staff member + key). The ledger stays append-only (trigger + no write grants).
+- **Book on behalf** bypasses the booking window only: refused once the session started, never over capacity (session row lock, race-tested against `book_session`), needs a valid pack (`no_valid_credit`), `source = 'staff'`, actor in `bookings.created_by` and the debit's `actor_id`. Unpublished sessions are allowed for staff.
+- **Cancel on behalf** ignores the cancellation window, refunds by default into the original pack while it is still valid (`refund_skipped` otherwise), records `cancelled_by`; refused once attendance is marked (`cancellation_not_allowed`). State-idempotent like `cancel_booking`.
+- Grant UI picks a last valid day in studio time and sends `grant_credits` its `p_valid_days` = days until that day + 1. Copy states nothing is charged in the app (ADR-006).
+- Routes: `/admin/alumnas/?q=` (search) and `/admin/alumna/?id=` (detail).
+- `admin_cancel_session` is redefined in the same migration only to store the staff reason alone (or null) as the refund ledger note; the old English prefix ("session cancelled: …") was visible to students. The UI labels the entry from its kind.

@@ -49,6 +49,19 @@ describe("New session form (AD-03)", () => {
     expect(screen.queryByLabelText("Link de la videollamada")).toBeNull()
   })
 
+  it("names the modality radios by their visible labels, not their values", async () => {
+    setup()
+    await ready()
+    const online = screen.getByRole("radio", { name: "Online" }) as HTMLInputElement
+    const inPerson = screen.getByRole("radio", { name: "Presencial" }) as HTMLInputElement
+    expect(online.checked).toBe(true)
+    expect(screen.queryByRole("radio", { name: "online" })).toBeNull()
+    expect(screen.queryByRole("radio", { name: "in_person" })).toBeNull()
+    fireEvent.click(inPerson)
+    expect(inPerson.checked).toBe(true)
+    expect(input("Dirección")).toBeTruthy()
+  })
+
   it("shows field errors and does not call the server", async () => {
     const { admin } = setup()
     await ready()

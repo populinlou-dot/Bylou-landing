@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  adjustCredits,
+  bookForStudent,
+  cancelForStudent,
   cancelSession,
   createSessions,
+  getStudentDetail,
+  grantPack,
+  searchStudents,
   getAdminDay,
   getAdminSessionDetail,
   markAttendance,
@@ -13,7 +19,7 @@ import {
 } from "../../application"
 import { DEFAULT_STUDIO_RULES } from "../../config"
 import { MockAdminRepository } from "./mock-admin-repository"
-import { DEMO_OTP_CODE, DEMO_STAFF_EMAIL, DEMO_STAFF_ID, MockAuth } from "./mock-auth"
+import { DEMO_OTP_CODE, DEMO_STAFF_EMAIL, DEMO_STAFF_ID, DEMO_USER_ID, MockAuth } from "./mock-auth"
 import { MockBookingRepository } from "./mock-booking-repository"
 
 // Wednesday 2026-10-14 12:00 Buenos Aires.
@@ -233,3 +239,144 @@ describe("MockAdminRepository Phase 4.2 writes (mirror the RPCs)", () => {
     expect(await anon.admin.createSessions({ ...draft, requestKey: KEY_A })).toEqual({ ok: false, code: "unauthenticated" })
   })
 })
+
+describe("MockAdminRepository Phase 4.3 students + credits (mirror the RPCs)", () => {
+  const KEY_G = "00000000-0000-4000-8000-0000000000c1"
+  const KEY_ADJ = "00000000-0000-4000-8000-0000000000c2"
+  const KEY_BOOK = "00000000-0000-4000-8000-0000000000c3"
+
+  /** I6 in the demo: every pack's remaining = Σ its ledger deltas. */
+  function ledgerMismatches(repository: MockBookingRepository): string[] {
+    const { grants, ledger } = repository.sharedState()
+    return grants
+      .filter((g) => g.remaining !== ledger.filter((e) => e.grantId === g.id).reduce((sum, e) => sum + e.delta, 0))
+      .map((g) => g.id)
+  }
+
+  it("lists demo students (accent-insensitive search), never staff; students and anon are refused", async () => {
+    const { admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    const all = await searchStudents({ admin }, "")
+    expect(all.some((s) => s.userId === DEMO_USER_ID && s.balance === 7)).toBe(true)
+    expect(all.some((s) => s.userId === DEMO_STAFF_ID)).toBe(false)
+    expect((await searchStudents({ admin }, "BELEN")).map((s) => s.displayName)).toEqual(["Belén (demo)"])
+    expect(ledgerMismatches(repository)).toEqual([])
+    const student = await setup("alumna@example.test")
+    await expect(searchStudents({ admin: student.admin }, "")).rejects.toMatchObject({ code: "forbidden" })
+    expect(await student.admin.grantCredits({ userId: DEMO_USER_ID, credits: 1, validDays: 1, note: null, requestKey: KEY_G })).toEqual({
+      ok: false,
+      code: "forbidden",
+    })
+  })
+
+  it("grants a pack once per request key, valid through the chosen local day, with its ledger row", async () => {
+    const { admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    const cmd = { userId: "demo-user-1", draft: { credits: 4, expiresOn: "2026-11-12", note: " Pack 4 " }, requestKey: KEY_G }
+    const first = await grantPack({ admin, clock }, cmd, { timezone: TZ })
+    const again = await grantPack({ admin, clock }, cmd, { timezone: TZ })
+    expect(first).toMatchObject({ ok: true, credits: 4, expiresAt: "2026-11-13T03:00:00.000Z", replayed: false })
+    expect(again).toMatchObject({ ok: true, replayed: true })
+    const detail = await getStudentDetail({ admin, repository, clock }, { id: "demo-user-1" })
+    expect(detail?.student.balance).toBe(4)
+    expect(detail?.activeGrants).toHaveLength(1)
+    expect(detail?.ledger.map((e) => [e.reason, e.delta, e.note, e.actor])).toEqual([["grant", 4, "Pack 4", "staff"]])
+    expect(ledgerMismatches(repository)).toEqual([])
+  })
+
+  it("adjusts one pack within 0..size, with the reason in the ledger; replays on the key", async () => {
+    const { admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    const grant = { remaining: 7, total: 8 }
+    const tooMany = await admin.adjustCredits({ grantId: "demo-grant-1", delta: -8, reason: "x", requestKey: KEY_B })
+    expect(tooMany).toEqual({ ok: false, code: "insufficient_balance", creditsRemaining: 7 })
+    // 7 left of 8, but the attended history booking still holds 1 (it could be refunded): +1 does not fit.
+    expect(await admin.adjustCredits({ grantId: "demo-grant-1", delta: 1, reason: "x", requestKey: KEY_B })).toMatchObject({
+      code: "adjust_exceeds_pack",
+    })
+    const draft = { grantId: "demo-grant-1", direction: "remove" as const, amount: 2, reason: "Clase tomada fuera de la app" }
+    const ok = await adjustCredits({ admin }, { draft, grant, requestKey: KEY_ADJ })
+    expect(ok).toMatchObject({ ok: true, delta: -2, creditsRemaining: 5, balance: 5, replayed: false })
+    expect(await adjustCredits({ admin }, { draft, grant, requestKey: KEY_ADJ })).toMatchObject({ ok: true, replayed: true, creditsRemaining: 5 })
+    const detail = await getStudentDetail({ admin, repository, clock }, { id: DEMO_USER_ID })
+    expect(detail?.ledger[0]).toMatchObject({ reason: "admin_adjust", delta: -2, note: "Clase tomada fuera de la app", actor: "staff" })
+    expect(detail?.ledger.filter((e) => e.reason === "admin_adjust")).toHaveLength(1)
+    expect(ledgerMismatches(repository)).toEqual([])
+  })
+
+  it("books on behalf outside the booking window, respects capacity, then cancels with a refund", async () => {
+    const { auth, admin, repository } = await setup(DEMO_STAFF_EMAIL)
+    // 42 days ahead: not open for students (30 days), and a 60-day pack covers it.
+    const created = await createSessions({ admin, clock }, { ...draftSession("2026-11-25"), requestKey: KEY_A }, { timezone: TZ })
+    expect(created.ok).toBe(true)
+    const sessionId = created.ok ? created.sessionIds[0] : ""
+    await grantPack({ admin, clock }, { userId: DEMO_USER_ID, draft: { credits: 2, expiresOn: "2026-12-12", note: "" }, requestKey: KEY_G }, { timezone: TZ })
+
+    await signInAs(auth, "alumna@example.test")
+    expect(await reserveSession({ repository }, { sessionId, idempotencyKey: KEY_B })).toEqual({ ok: false, code: "booking_not_open" })
+    await signInAs(auth, DEMO_STAFF_EMAIL)
+
+    const booked = await bookForStudent({ admin }, { userId: DEMO_USER_ID, sessionId, requestKey: KEY_BOOK })
+    expect(booked).toMatchObject({ ok: true, replayed: false })
+    expect(await bookForStudent({ admin }, { userId: DEMO_USER_ID, sessionId, requestKey: KEY_BOOK })).toMatchObject({ ok: true, replayed: true })
+    // Capacity 1: the staff booking filled it, so nobody else gets in (capacity is never bypassed).
+    expect(await bookForStudent({ admin }, { userId: "demo-user-1", sessionId, requestKey: KEY_B })).toEqual({ ok: false, code: "session_full" })
+    expect(await bookForStudent({ admin }, { userId: DEMO_STAFF_ID, sessionId, requestKey: KEY_B })).toEqual({ ok: false, code: "not_found" })
+
+    const detail = await getStudentDetail({ admin, repository, clock }, { id: DEMO_USER_ID })
+    const upcoming = detail!.upcoming.find((b) => b.sessionId === sessionId)!
+    expect(upcoming.source).toBe("staff")
+    expect(detail!.ledger[0]).toMatchObject({ reason: "booking_debit", actor: "staff" })
+
+    expect(await bookForStudent({ admin }, { userId: DEMO_USER_ID, sessionId, requestKey: KEY_A })).toEqual({ ok: false, code: "already_booked" })
+
+    const bookingId = booked.ok ? booked.bookingId : ""
+    expect(await cancelForStudent({ admin }, { bookingId, refund: true })).toEqual({
+      ok: true,
+      bookingId,
+      refunded: true,
+      refundSkipped: false,
+      replayed: false,
+    })
+    expect(await cancelForStudent({ admin }, { bookingId, refund: true })).toMatchObject({ ok: true, replayed: true, refunded: true })
+    const after = await getStudentDetail({ admin, repository, clock }, { id: DEMO_USER_ID })
+    expect(after!.ledger.filter((e) => e.reason === "cancel_refund" && e.bookingId === bookingId)).toHaveLength(1)
+    expect(ledgerMismatches(repository)).toEqual([])
+  })
+
+  it("never overbooks: a full demo session refuses a staff booking; a pack-less student gets no_valid_credit", async () => {
+    const { admin } = await setup(DEMO_STAFF_EMAIL)
+    const views = await admin.listSessions({ from: NOW, to: "2026-10-28T03:00:00.000Z" })
+    const upcoming = views.filter((v) => v.session.status === "scheduled" && v.session.startsAt > NOW)
+    const full = upcoming.find((v) => v.confirmedCount >= v.session.capacity && v.session.capacity > 1)!
+    const free = upcoming.find((v) => v.confirmedCount < v.session.capacity)!
+    expect(full && free).toBeTruthy()
+    expect(await bookForStudent({ admin }, { userId: DEMO_USER_ID, sessionId: full.session.id, requestKey: KEY_BOOK })).toEqual({
+      ok: false,
+      code: "session_full",
+    })
+    expect(await bookForStudent({ admin }, { userId: "demo-user-99", sessionId: free.session.id, requestKey: KEY_BOOK })).toEqual({
+      ok: false,
+      code: "not_found",
+    })
+    const created = await createSessions({ admin, clock }, { ...draftSession("2026-10-23"), requestKey: KEY_A }, { timezone: TZ })
+    const sessionId = created.ok ? created.sessionIds[0] : ""
+    expect(await bookForStudent({ admin }, { userId: "demo-user-1", sessionId, requestKey: KEY_B })).toEqual({
+      ok: false,
+      code: "no_valid_credit",
+    })
+  })
+})
+
+function draftSession(localDate: string) {
+  return {
+    classTypeId: "demo-individual",
+    localDate,
+    localStart: "10:00",
+    durationMinutes: 60,
+    capacity: 1,
+    modality: "in_person" as const,
+    locationLabel: null,
+    address: "Calle Falsa 123",
+    meetingUrl: null,
+    instructorName: null,
+    repeatWeeks: 1,
+  }
+}

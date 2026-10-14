@@ -1,7 +1,7 @@
 "use client"
 
 import { AlertCircle, Mail } from "lucide-react"
-import { useEffect, useId, useRef, type FormEvent } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, type FormEvent } from "react"
 import type { AuthCode } from "../../application"
 import { useCopy } from "../booking-context"
 import { DisplayTitle, Eyebrow, buttonClass } from "../primitives"
@@ -39,11 +39,22 @@ export function SignInView(props: SignInViewProps) {
   const hintId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Moving between steps (or failing) puts focus on the field that needs attention.
+  // The form is server-rendered in dev (and interactive before hydration): adopt anything typed
+  // before React took over, otherwise the next render of the controlled input would wipe it.
+  const adoptTypedEmail = useRef({ step: props.step, email: props.email, onEmailChange: props.onEmailChange })
   useEffect(() => {
+    const node = inputRef.current
+    const initial = adoptTypedEmail.current
+    if (initial.step === "email" && node && node.value !== initial.email) initial.onEmailChange(node.value)
+  }, [])
+
+  // Moving between steps (or failing) puts focus on the field that needs attention. Layout effects:
+  // focus moves in the same commit that shows the field (a passive effect ran a task later, so the
+  // new input was briefly on screen without focus — the source of a flaky test).
+  useLayoutEffect(() => {
     if (props.step === "code") inputRef.current?.focus()
   }, [props.step])
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (props.error) inputRef.current?.focus()
   }, [props.error])
 

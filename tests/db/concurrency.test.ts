@@ -224,3 +224,59 @@ describe.sequential("journey AD-05.1 — capacity edit vs book", () => {
     expect(outcomes.reduced + outcomes.refused).toBe(ITERATIONS)
   })
 })
+
+describe.sequential("journey AD-10 — staff books for a student vs a student booking", () => {
+  it(`admin_book_for and book_session race for the last spot → never over capacity (×${ITERATIONS})`, async () => {
+    const [filler, student, onBehalf] = await actorsFor(3)
+    const staff = await Actor.connect(await admin.staffId())
+    actors.push(staff)
+    const outcomes = { staff: 0, student: 0 }
+    for (let i = 0; i < ITERATIONS; i++) {
+      const session = await admin.session(2)
+      expect((await filler.book(session)).ok).toBe(true)
+
+      const [byStaff, byStudent] = await admin.race(LOCK_SESSION, [session], [staff, student], (a) =>
+        a === staff ? a.bookFor(onBehalf.userId, session) : a.book(session),
+      )
+
+      expect(codes([byStaff, byStudent]).sort()).toEqual(["ok", "session_full"])
+      if (byStaff.ok) outcomes.staff++
+      else outcomes.student++
+      const { confirmed_count, capacity } = await admin.one<{ confirmed_count: number; capacity: number }>(
+        "select confirmed_count, capacity from public.sessions where id = $1",
+        [session],
+      )
+      expect(confirmed_count).toBe(2)
+      expect(confirmed_count).toBeLessThanOrEqual(capacity)
+      expect(await admin.invariantViolations([session], [filler, student, onBehalf].map((a) => a.userId))).toEqual([])
+    }
+    expect(outcomes.staff + outcomes.student).toBe(ITERATIONS)
+  })
+})
+
+describe.sequential("journey AD-08.2 — credit adjustment vs booking", () => {
+  it(`admin_adjust_credits(-1) and book_session race for the last credit → one wins, never negative (×${ITERATIONS})`, async () => {
+    const staff = await Actor.connect(await admin.staffId())
+    actors.push(staff)
+    for (let i = 0; i < ITERATIONS; i++) {
+      const userId = await admin.createUser()
+      const grant = await admin.grant(userId, 1)
+      const student = await Actor.connect(userId)
+      const session = await admin.session(5)
+
+      // book_session locks the session, then the grant; the adjustment locks only the grant.
+      const [adjust, book] = await admin.race(LOCK_GRANT, [grant], [staff, student], (a) =>
+        a === staff ? a.adjust(grant, -1) : a.book(session),
+      )
+
+      expect(codes([adjust, book]).sort()).toEqual(adjust.ok ? ["no_valid_credit", "ok"] : ["insufficient_balance", "ok"])
+      const { remaining } = await admin.one<{ remaining: number }>(
+        "select credits_remaining as remaining from public.credit_grants where id = $1",
+        [grant],
+      )
+      expect(remaining).toBe(0)
+      expect(await admin.invariantViolations([session], [userId])).toEqual([])
+      await student.end() // one connection per iteration would exhaust the local pool
+    }
+  })
+})

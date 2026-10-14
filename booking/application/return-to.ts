@@ -9,6 +9,8 @@ export const ADMIN_PATH = "/admin/"
 export const ADMIN_SESSION_PATH = "/admin/clase/"
 export const ADMIN_NEW_SESSION_PATH = "/admin/nueva-clase/"
 export const ADMIN_CLASS_TYPES_PATH = "/admin/practicas/"
+export const ADMIN_STUDENTS_PATH = "/admin/alumnas/"
+export const ADMIN_STUDENT_PATH = "/admin/alumna/"
 
 /** Sections a sign-in may return to. The admin shell is public; RLS/RPC protect its data (ADR-003). */
 const RETURN_PREFIXES = [AGENDA_PATH, ADMIN_PATH] as const
@@ -60,4 +62,15 @@ export function adminSessionHref(sessionId: string): string {
 /** New session form (`/admin/nueva-clase/?dia=`), prefilled with a studio-local day. */
 export function adminNewSessionHref(date?: string | null): string {
   return date ? `${ADMIN_NEW_SESSION_PATH}?${new URLSearchParams({ dia: date }).toString()}` : ADMIN_NEW_SESSION_PATH
+}
+
+/** Student search (`/admin/alumnas/?q=`); no query = full list. */
+export function adminStudentsHref(query?: string | null): string {
+  const q = query?.trim()
+  return q ? `${ADMIN_STUDENTS_PATH}?${new URLSearchParams({ q }).toString()}` : ADMIN_STUDENTS_PATH
+}
+
+/** One student: balance, packs, bookings and ledger (`/admin/alumna/?id=`). */
+export function adminStudentHref(userId: string): string {
+  return `${ADMIN_STUDENT_PATH}?${new URLSearchParams({ id: userId }).toString()}`
 }

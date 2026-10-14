@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 3.2 — Supabase adapter + email-OTP + real book/cancel (LOCAL stack)** in progress. Phase 3.1 done (`57424f5`, `407197d`). Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 3.3 — DB hardening + hosted setup guide** in progress. Phase 3.1 done (`57424f5`, `407197d`); Phase 3.2 done (`a810ab7`). Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -15,8 +15,10 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | **Phase 2.1** read-only agenda (mock) | frontend engineer | `booking/application`, `booking/infrastructure/mock`, `booking/ui`, `app/reservas/` | done (`157bcc7`; 141 tests; orchestrator browser-checked static build: agenda, deep-link refresh of `/reservas/sesion/?id=`, invalid id, landing intact) |
 | Docs reconciliation | writer | PRD/ARCHITECTURE/ROADMAP/DATA_MODEL/UX_DESIGN | done (`a203b8c`) |
 | **Phase 3.1** local migrations + pgTAP + race tests | backend-security | `supabase/**`, `tests/db/` | done (`57424f5`; orchestrator re-ran: pgTAP 182/182, races 6/6, unit 141/141; no secrets) |
-| Security review of migrations | qa / review-risk (read-only) | report → fixes | running |
-| **Phase 3.2** adapter + OTP + book/cancel UI (local) | frontend engineer | `booking/**`, `app/reservas/**`, `.env.example` | running |
+| Security review of migrations | qa / review-risk (read-only) | report | done: 0 blocker / 0 high / 1 medium / 2 low / 5 info |
+| **Phase 3.2** adapter + OTP + book/cancel UI (local) | frontend engineer | `booking/**`, `app/reservas/**` | done (`a810ab7`; 256 tests; E2E vs local Supabase scripted: book, replay, full, refund, late-cancel denied) |
+| **Phase 3.3** DB hardening (OTP email template w/ code, confirmations on, confirmed-only profile email, unpublished class types, hide `updated_by`) | backend-security | `supabase/**` | running |
+| Hosted Supabase setup guide (owner approved 2026-10-14) | devops writer | `SUPABASE_SETUP.md` | running |
 
 Phase 0 workstreams:
 
@@ -61,13 +63,22 @@ Carried over from a previous local setup session; intentionally left uncommitted
 - (in progress, docs agent) route naming `/reservas/sesion/`, `listSessions`, past/cancelled sessions listed, Bylou deny policy across docs.
 - Add RPC-only codes from `DATA_MODEL.md` §13 (`capacity_below_bookings`, `attendance_window_closed`, `session_not_full`) to the result-code contract (application layer, not domain) + copy keys; reflect `p_accept_late` in ARCHITECTURE `cancel(cmd)`.
 
+## Pre-release checklist (from security review, not yet done)
+
+- [ ] CAPTCHA (Turnstile) on sign-in: needs site key + frontend change.
+- [ ] Throttle book/cancel churn (review LOW #3): RPC-level rate limit or per-user daily cap.
+- [ ] Account erasure: anonymize procedure (FKs are `ON DELETE RESTRICT`).
+- [ ] Admin UI must escape `display_name`; never put staff-only comments in credit notes (students can read their own notes).
+- [ ] Never run `supabase/seed.sql` against a hosted project.
+- [ ] `.env.example`: writing `.env*` files is blocked by the current permission settings. Owner to allow or create it (content: `NEXT_PUBLIC_BOOKING_DATA_SOURCE`, `NEXT_PUBLIC_BOOKING_BRAND`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BASE_PATH`, all empty, public values only).
+
 ## Blockers / decisions needing human input
 
 Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 
 1. ~~Cancellation rules~~ → decided (24 h, then blocked).
 2. Credit validity measured at session start (not booking time)?
-3. Approve creating a Supabase project (free tier) + custom SMTP for OTP emails.
+3. ~~Approve hosted Supabase~~ → approved to receive setup steps (owner creates project; `SUPABASE_SETUP.md`).
 4. Mercado Pago in V2? (not MVP)
 5. Align pnpm between local (11) and CI (9) via `packageManager` — touches deploy pipeline.
 

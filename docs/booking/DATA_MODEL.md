@@ -922,3 +922,21 @@ Resolved and removed (numbers kept for references): #1 RPC-only codes → ARCHIT
 
 - Supabase docs via Context7 (`/supabase/supabase`): RLS guide (security-definer helpers in a private schema, `(select auth.uid())` initPlan, `to authenticated`, views and `security_invoker`), Database Functions (definer vs invoker, `set search_path = ''`, revoking EXECUTE from `public`/`anon`, default privileges), column-level privileges, managing user data (`auth.users` → `profiles` trigger), passwordless email OTP (`signInWithOtp`, `verifyOtp({ type: 'email' })`, `{{ .Token }}`), local testing with pgTAP / `supabase test db`, pg_cron.
 - PostgreSQL 17 docs via Context7: Read Committed (UPDATE/`FOR UPDATE` wait and re-evaluate on the updated row version), SELECT locking clause caveats (ORDER BY with locking under READ COMMITTED; locking in a subquery).
+
+## 14. Implementation notes (Phase 3.1, as built)
+
+Where the migrations differ from the sketches above, **the migrations are authoritative**:
+
+| # | As built | Why |
+|---|---|---|
+| 1 | `booking_closed` when `now() >= closes_at` | Matches the domain (close is exclusive). |
+| 2 | Booking opens at `starts_at − opens_days_before × 24h` | Matches domain `DAY_MS`; AR has no DST. |
+| 3 | Grant tie-break: `expires_at, created_at, id` | Matches domain `grantedAt` ordering. |
+| 4 | Settings singleton inserted by migration (Bylou 24 h + `deny`); seed reasserts it | One Supabase project per studio (white-label = separate project). |
+| 5 | `create_session` / `grant_credits` same-key calls serialized with an advisory lock; key reuse with different payload → SQLSTATE `22023` (`invalid_input`) | Idempotency for admin ops. |
+| 6 | `admin_cancel_session(p_reason)` stores the reason in the refund ledger note only | Avoids a new column in MVP. |
+| 7 | `cancel_booking` on a studio-cancelled session → `cancellation_not_allowed` | Domain parity. |
+| 8 | Race harness lives in `tests/db/` (`npx pnpm@9 run test:db`), pgTAP in `supabase/tests/database/` (`supabase test db`) | Keeps DB tests out of the default unit run. |
+| 9 | Seed users: `staff@example.test`, `alumna1-3@example.test` | Obviously fake. |
+
+Deferred to Phase 4: waitlist (table, RPCs, D6/D7/D9), credit-expiry job / pg_cron (D10), `admin_update_session` (F4), `admin_update_settings`, `admin_upsert_class_type`, `admin_adjust_credits`.

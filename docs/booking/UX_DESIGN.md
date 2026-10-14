@@ -127,7 +127,7 @@ Open product decision: today 1:1 is "horario a medida". Booking requires Lou to 
 ```
 PUBLIC / STUDENT (layout: booking, theme scope)      ADMIN (layout: admin, noindex)
 /reservas/                 Agenda (home)              /admin/              Hoy
-/reservas/clase/?id=…      Session detail (deep link) /admin/agenda/       Week grid + create
+/reservas/sesion/?id=…     Session detail (deep link) /admin/agenda/       Week grid + create
 /reservas/ingresar/        Sign in (email code)       /admin/clase/?id=…   Roster, attendance, waitlist
 /reservas/mis-reservas/    Upcoming + history + pack  /admin/alumnos/      Students, packs, balance
 /reservas/confirmada/?id=… Confirmation               /admin/practicas/    Class types
@@ -145,7 +145,7 @@ Elegir práctica ─► Ver días/horarios/lugares ─► Reservar ─► Confir
 Decision: practice selection is a **chip filter on the agenda**, not a separate screen. With 1–2 practice types a catalog step only adds a tap. Config flag `showCatalogStep` enables it for studios with >4 types.
 
 **Returning student ≤3 taps** (session persisted, filters remembered):
-1. Landing "Reservas" → agenda opens on the next day with availability, filtered by last practice/modality.
+1. Landing "Reservas" → agenda opens on the next day with availability, filtered by last practice/modality. *(Modality filter and remembered filter: pending slice, PRD ST-01 AC4; 2.1 ships the practice filter only.)*
 2. Tap **Reservar** on a session.
 3. Tap **Confirmar reserva** in the sheet → done.
 
@@ -196,7 +196,7 @@ First-time student: Reservar → sign-in (email + 6-digit code, name, phone) →
 │ Con Lou                          │
 │ ──────────────────────────────── │
 │ Usás 1 de tus 3 clases.          │
-│ Podés cancelar hasta 12 h antes. │
+│ Podés cancelar hasta 24 h antes. │
 │ El link aparece en Mis reservas. │
 │ [        Confirmar reserva      ]│  primary, full width
 │          Volver                  │
@@ -233,7 +233,7 @@ First-time student: Reservar → sign-in (email + 6-digit code, name, phone) →
 │ asististe / Cancelada            │
 ```
 
-**S6 · Cancel dialog**: summary + consequence ("La clase vuelve a tu pack" or, outside window, why it cannot be cancelled online) + `Sí, cancelar` / `No, mantener`.
+**S6 · Cancel dialog**: summary + consequence ("La clase vuelve a tu pack") + `Sí, cancelar` / `No, mantener`. Inside the 24 h window Bylou (`lateCancelPolicy: "deny"`, ADR-011) opens no dialog: `Cancelar reserva` is replaced by `cancel.closed` ("Ya no se puede cancelar online… escribile a Lou"), code `cancellation_too_late`. Studios on the platform option `allow_without_refund` instead get a forfeit warning (`cancel.late`) and can confirm.
 
 **Admin A1 · Hoy `/admin/`** (mobile-usable: Lou will mark attendance from her phone)
 ```
@@ -250,7 +250,7 @@ A2 Agenda (week grid, create single or weekly-recurring session), A3 Clase (rost
 
 | Screen | Loading | Empty | Error | Success | Full / waitlist | Past session | Cancel window closed |
 |---|---|---|---|---|---|---|---|
-| Agenda | Skeleton cards (static under reduced motion), day strip visible | "No hay clases publicadas para este día." + `Ver próxima fecha` | Inline banner + `Reintentar`; keep last data if cached | — | Badge `COMPLETA`; secondary `Anotarme en la lista`; if on list: "Estás en la lista · lugar 2" | Not listed (agenda starts now); started-today sessions show `En curso`, no CTA | n/a |
+| Agenda | Skeleton cards (static under reduced motion), day strip visible | "No hay clases publicadas para este día." + `Ver próxima fecha` | Inline banner + `Reintentar`; keep last data if cached | — | Badge `COMPLETA`; secondary `Anotarme en la lista`; if on list: "Estás en la lista · lugar 2" | Listed with text label `Finalizada` (past) or `Cancelada` (studio-cancelled), no CTA; started sessions show `En curso`, no CTA | n/a |
 | Confirm sheet | Button → "Reservando…", disabled, spinner ≤ inline | — | Conflict: "Alguien reservó el último lugar recién." + waitlist offer; no pack: S8 copy | Navigate to S4 | Waitlist confirm variant | Sheet cannot open (CTA hidden) | n/a |
 | Confirmation | Skeleton | — | "No encontramos esta reserva." + `Ver mis reservas` | ✓ | "Te anotamos en la lista de espera." variant | — | — |
 | Mis reservas | Skeleton | "Todavía no tenés clases reservadas." + `Ver horarios` | Banner + `Reintentar` | Toast after cancel: "Reserva cancelada. La clase volvió a tu pack." | "Lista de espera · lugar N" row + `Salir de la lista` | Moves to Historial with outcome label | `Cancelar` replaced by text: "Ya no se puede cancelar online…" + IG contact |
@@ -307,7 +307,7 @@ Rules: never convey state by color or opacity alone (always text/icon); double-s
 | `error.load` | No pudimos cargar los horarios. Revisá tu conexión y probá de nuevo. | |
 | `error.retry` | Reintentar | |
 | `error.conflict` | Alguien reservó el último lugar recién. | |
-| `empty.day` | No hay clases publicadas para este día. | |
+| `empty.day` | No hay clases publicadas para este día. | Not used yet: 2.1 shipped a week view with `empty.week`. |
 | `empty.next` | Ver próxima fecha | |
 
 Voice rules: voseo; system messages impersonal (no "te devolví"), Lou's first person only where the human relationship is the point (`cancel.closed`, `pack.none.cta`); dates in long form "martes 14 de octubre", 24h `19:00`; no exclamation marks except success; no "turno" (clinical) and no "créditos" (accounting) in Bylou copy.
@@ -460,7 +460,7 @@ Apply the theme as CSS variables on a wrapper (`[data-booking-theme="bylou"]`) i
 | R5 | No WhatsApp exists; contact is IG DM + email. Notifications by WhatsApp would be a new channel. | Scope |
 | R6 | 1:1 is "horario a medida" today; booking requires published slots. Group classes have no price/schedule yet. | Product decision for Lou |
 | R7 | Presencial address is "a coordinar"; decide whether it is shown after booking or per session. | Copy / data |
-| R8 | Waitlist promotion (auto-enroll vs. claim) and cancellation window hours are undecided (see `REFERENCE_ANALYSIS.md`). Copy keys are rule-driven. | Copy, domain |
+| R8 | Waitlist promotion (auto-enroll vs. claim) is undecided (see `REFERENCE_ANALYSIS.md`); cancellation decided in ADR-011 (24 h, then blocked). Copy keys are rule-driven. | Copy, domain |
 | R9 | Adding a 6th link to the desktop nav pill may overflow 1101–1280px. | Visual check needed |
 
-Open questions for the owner (one at a time when raised): cancellation window hours; auto-promotion from waitlist; whether presencial address is public.
+Open questions for the owner (one at a time when raised): auto-promotion from waitlist; whether presencial address is public.

@@ -9,17 +9,17 @@ Legend: ✅ done · 🔄 in progress · ⏳ planned · 🔒 **owner-gated** (ext
 | Phase | Goal | Status | Exit criterion |
 |---|---|---|---|
 | 0 Discovery | Audit repo, reference, UX; pick stack | ✅ | ADRs 001–012 written |
-| 1 Foundation | PRD, architecture, data model, domain core + tests, theme contract | 🔄 | Domain invariants green in Vitest; owner answers to PRD §6 |
-| 2 Read-only slice | `/reservas` agenda on mock data, Bylou theme | ⏳ | Agenda + detail work at 360px, keyboard, refresh |
-| 3 Transactional booking | Auth, real sessions, atomic book/cancel | ⏳ | Journeys A–E proven on Supabase local |
+| 1 Foundation | PRD, architecture, data model, domain core + tests, theme contract | ✅ | Domain invariants green in Vitest; owner answers to PRD §6 |
+| 2 Read-only slice | `/reservas` agenda on mock data, Bylou theme | 🔄 (2.1 ✅) | Agenda + detail work at 360px, keyboard, refresh |
+| 3 Transactional booking | Auth, real sessions, atomic book/cancel | 🔄 (3.1 local) | Journeys A–E proven on Supabase local |
 | 4 Admin + waitlist + credits | Lou operates without SQL | ⏳ | Journey F + D (waitlist) proven |
 | 5 White-label + release | `demo-studio`, E2E, release | ⏳ | Journeys A–H green on static `out/`; owner publishes |
 
 ```mermaid
 flowchart LR
-  P0[0 Discovery ✅] --> P1[1 Foundation]
-  P1 --> P2[2 Read-only]
-  P1 --> P3a[3.1 Supabase local + schema]
+  P0[0 Discovery ✅] --> P1[1 Foundation ✅]
+  P1 --> P2[2 Read-only · 2.1 ✅]
+  P1 --> P3a[3.1 Supabase local + schema 🔄]
   P2 --> P3b[3.4 Reserve/cancel UI]
   P3a --> P3b
   P3b --> P4[4 Admin + waitlist + credits]
@@ -53,34 +53,38 @@ Each slice below lists only its **extra** DoD items.
 | 0.3 UX + visual system | `UX_DESIGN.md` |
 | 0.4 Stack and ADRs | `DECISIONS.md` (ADR-001…012) |
 
-## Phase 1 — Foundation 🔄
+## Phase 1 — Foundation ✅
+
+Commits: `545e5a4` (discovery + ADRs), `13c9c92` (domain, theme contract, brands + tests), `99e86fe` (PRD, architecture, roadmap, ADR-013/014), `b23205d` (data model, RLS, RPC specs, SQL test plan).
 
 | Slice | Scope | Depends on | Extra DoD | Status |
 |---|---|---|---|---|
-| 1.1 Product + architecture docs | `PRD.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `DATA_MODEL.md` | 0 | Cross-links valid; no duplicated content; open issues listed | 🔄 |
-| 1.2 Test tooling | Vitest + `test` script; domain purity import-scan test | 0 | Lockfile regenerated with pnpm 9; CI workflow untouched | 🔄 |
-| 1.3 Domain core | Types (shared vocabulary), `decideBooking`, `decideCancellation`, credit selection, availability, result codes | 1.2 | Unit tests for every reason code and window edges (inclusive boundary, UTC/TZ day grouping); domain imports nothing external | 🔄 |
-| 1.4 Theme contract | `BookingTheme`/`BrandConfig`, `themeToCssVars`, `brands/bylou` (real tokens), `brands/demo-studio` skeleton | 1.2 | Contract type-checks both brands; contrast pairs from `UX_DESIGN.md` §5 respected | 🔄 |
-| 1.5 Owner decisions | Answers to [PRD §6](./PRD.md#6-owner-questions-most-decision-relevant-first); update ADR-011 status | 1.1 | 🔒 Owner input; DECISIONS updated | ⏳ |
+| 1.1 Product + architecture docs | `PRD.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `DATA_MODEL.md` | 0 | Cross-links valid; no duplicated content; open issues listed | ✅ |
+| 1.2 Test tooling | Vitest + `test` script; domain purity import-scan test | 0 | Lockfile regenerated with pnpm 9; CI workflow untouched | ✅ |
+| 1.3 Domain core | Types (shared vocabulary), `evaluateBooking`, `evaluateCancellation`, credit selection, availability, result codes | 1.2 | Unit tests for every reason code and window edges (inclusive boundary, UTC/TZ day grouping); domain imports nothing external | ✅ |
+| 1.4 Theme contract | `BookingTheme`/`BrandConfig`, `themeToCssVars`, `brands/bylou` (real tokens), `brands/demo-studio` skeleton | 1.2 | Contract type-checks both brands; contrast pairs from `UX_DESIGN.md` §5 respected | ✅ |
+| 1.5 Owner decisions | Answers to [PRD §6](./PRD.md#6-owner-questions-most-decision-relevant-first); update ADR-011 status | 1.1 | 🔒 Owner input; DECISIONS updated | ✅ cancellation (ADR-011 Accepted, `8f8b4f6`); remaining PRD §6 questions 🔒 open |
 
-## Phase 2 — Read-only slice ⏳
+## Phase 2 — Read-only slice 🔄
 
-| Slice | Scope | Depends on | Extra DoD |
-|---|---|---|---|
-| **2.1 Agenda (first slice)** | `/reservas/` read-only agenda: `MockBookingRepository`, Bylou theme scope, filters, day strip, spots, empty/loading/error states (ST-01, PL-03) | 1.3, 1.4 | Mock banner visible; `noindex`; refresh on `/reservas/` returns 200 from `out/`; landing `/` unchanged; reduced-motion respected |
-| 2.2 Session detail | `/reservas/clase/?id=` with `Suspense` + not-found state (ST-02) | 2.1 | Direct load + refresh with valid/invalid `id`; links via `next/link` |
-| 2.3 Landing entry | Data-only "Reservas" entries in `NAV_LINKS` / `NAV_PANEL` (`UX_DESIGN.md` §4) | 2.1 | Nav pill checked 1101–1280px; 🔒 publishing to production = merge to `main` |
-| 2.4 PR build check | New workflow that builds (no deploy) on PRs | 1.2 | `main.yml` unchanged; 🔒 owner approves CI change |
+| Slice | Scope | Depends on | Extra DoD | Status |
+|---|---|---|---|---|
+| **2.1 Agenda (first slice)** | `/reservas/` read-only agenda: `MockBookingRepository`, Bylou theme scope, filters, day strip, spots, empty/loading/error states (ST-01, PL-03) | 1.3, 1.4 | Mock banner visible; `noindex`; refresh on `/reservas/` returns 200 from `out/`; landing `/` unchanged; reduced-motion respected | ✅ `157bcc7` (week view + practice filter; modality filter and remembered filter pending, PRD ST-01 AC4) |
+| 2.2 Session detail | `/reservas/sesion/?id=` with `Suspense` + not-found state (ST-02) | 2.1 | Direct load + refresh with valid/invalid `id`; links via `next/link` | ✅ shipped with 2.1 (`157bcc7`) |
+| 2.3 Landing entry | Data-only "Reservas" entries in `NAV_LINKS` / `NAV_PANEL` (`UX_DESIGN.md` §4) | 2.1 | Nav pill checked 1101–1280px; 🔒 publishing to production = merge to `main` | ⏳ (ADR-013: no landing link before release) |
+| 2.4 PR build check | New workflow that builds (no deploy) on PRs | 1.2 | `main.yml` unchanged; 🔒 owner approves CI change | ⏳ |
 
-## Phase 3 — Transactional booking ⏳
+## Phase 3 — Transactional booking 🔄
 
-| Slice | Scope | Depends on | Extra DoD |
-|---|---|---|---|
-| 3.1 Schema + RLS (local) | `supabase/` migrations, RLS on every table, `is_staff()`, profile trigger, seed (DATA_MODEL) | 1.3 | SQL tests: SE-02 matrix (anon, student A/B, staff); rollback documented per migration |
-| 3.2 Booking RPCs | `book_session`, `cancel_booking` (+ settings row for `StudioRules`) | 3.1 | SQL tests: SE-01 parallel race, ST-05 replay, ST-09 window edges and refund-once; codes match ARCHITECTURE §5 |
-| 3.3 Auth | `SupabaseAuth` + `/reservas/ingresar/` OTP + profile completion + `returnTo` guard (ST-03) | 3.1 | Local mail catcher flow verified; open-redirect test |
-| 3.4 Reserve / cancel UI | Supabase adapter, confirm sheet, confirmation, Mis reservas, credit balance, `.ics`, cancel dialog (ST-04…ST-11) | 2.2, 3.2, 3.3 | Retry reuses idempotency key; every reason code has copy; dialog focus trap/Esc/return |
-| 3.5 Production wiring | 🔒 Create Supabase project; 🔒 configure OTP template, Site URL, redirect allowlist, custom SMTP; 🔒 apply migrations to prod; 🔒 add repo variables for public URL/key; 🔒 bootstrap Lou as `admin` via SQL | 3.4 | Owner executes each step from written instructions; secrets never pasted in chat; `service_role` grep clean (SE-03) |
+Slices 3.1–3.4 run only against Supabase local (Docker). Any step touching a hosted Supabase project stays 🔒 owner-gated (3.5).
+
+| Slice | Scope | Depends on | Extra DoD | Status |
+|---|---|---|---|---|
+| 3.1 Schema + RLS (local) | `supabase/` migrations, RLS on every table, `is_staff()`, profile trigger, seed (DATA_MODEL) | 1.3 | SQL tests: SE-02 matrix (anon, student A/B, staff); rollback documented per migration | 🔄 local migrations + SQL tests |
+| 3.2 Booking RPCs | `book_session`, `cancel_booking` (+ settings row for `StudioRules`) | 3.1 | SQL tests: SE-01 parallel race, ST-05 replay, ST-09 window edges and refund-once; codes match ARCHITECTURE §5 | ⏳ |
+| 3.3 Auth | `SupabaseAuth` + `/reservas/ingresar/` OTP + profile completion + `returnTo` guard (ST-03) | 3.1 | Local mail catcher flow verified; open-redirect test | ⏳ |
+| 3.4 Reserve / cancel UI | Supabase adapter, confirm sheet, confirmation, Mis reservas, credit balance, `.ics`, cancel dialog (ST-04…ST-11) | 2.2, 3.2, 3.3 | Retry reuses idempotency key; every reason code has copy; dialog focus trap/Esc/return | ⏳ |
+| 3.5 Production wiring | 🔒 Create Supabase project; 🔒 configure OTP template, Site URL, redirect allowlist, custom SMTP; 🔒 apply migrations to prod; 🔒 add repo variables for public URL/key; 🔒 bootstrap Lou as `admin` via SQL | 3.4 | Owner executes each step from written instructions; secrets never pasted in chat; `service_role` grep clean (SE-03) | 🔒 |
 
 Credits in Phase 3 are granted by SQL/seed (no admin UI yet) so booking can debit real grants.
 

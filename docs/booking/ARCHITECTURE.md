@@ -42,8 +42,8 @@ flowchart LR
 
 | Module | Contains | May import | Must not import |
 |---|---|---|---|
-| `booking/domain` | Entity types, value objects, policies (`decideBooking`, `decideCancellation`, credit selection, availability), result codes | nothing outside itself | react, next, `@supabase/*`, `brands/*`, `booking/*` other modules |
-| `booking/application` | Use cases (`listAgenda`, `reserveSession`, `cancelBooking`, `getMyAccount`), port interfaces | `domain` | react, next, `@supabase/*`, `brands/*`, `infrastructure` |
+| `booking/domain` | Entity types, value objects, policies (`evaluateBooking`, `evaluateCancellation`, credit selection, availability), result codes | nothing outside itself | react, next, `@supabase/*`, `brands/*`, `booking/*` other modules |
+| `booking/application` | Use cases (`getAgendaWeek`, `getSessionDetail` implemented; `reserveSession`, `cancelBooking`, `getMyAccount` in Phase 3), port interfaces | `domain` | react, next, `@supabase/*`, `brands/*`, `infrastructure` |
 | `booking/infrastructure` | `SupabaseBookingRepository`, `SupabaseAuth`, `MockBookingRepository`, `MockAuth`, `SystemClock`, adapter factory | `domain`, `application` (ports), `@supabase/supabase-js` | react, `ui`, `admin`, `brands/*` |
 | `booking/config` | `StudioRules` defaults schema + validation, terminology keys, feature flags | `domain` (types) | react, `@supabase/*`, `brands/*` |
 | `booking/theme` | `BookingTheme` / `BrandConfig` contract, `themeToCssVars()`, `<BookingThemeScope>` | `config` (types) | `domain` logic, `@supabase/*`, `brands/*` |
@@ -58,7 +58,7 @@ flowchart LR
 
 ## 3. Ports
 
-Sketch; final names live in `booking/application/ports.ts`. All instants are UTC ISO-8601 strings (`timestamptz` in DB).
+Read side is implemented in `booking/application/ports.ts` (`getStudioRules`, `listClassTypes`, `listSessions(range)` on a half-open `[from, to)` `InstantRange`, `getSession`), consumed by `booking/application/get-agenda.ts`; that file wins over this sketch. Write methods below are the Phase 3 sketch. All instants are UTC ISO-8601 strings (`timestamptz` in DB).
 
 ```ts
 // booking/application/ports.ts
@@ -98,12 +98,13 @@ export type CancelResult =
 export interface BookingRepository {
   getStudioRules(): Promise<StudioRules>;
   listClassTypes(): Promise<ClassType[]>;
-  listAgenda(range: { from: string; to: string }): Promise<SessionAvailability[]>;
+  listSessions(range: { from: string; to: string }): Promise<SessionAvailability[]>; // InstantRange
   getSession(id: string): Promise<SessionAvailability | null>;
   listMyBookings(): Promise<Array<{ booking: Booking; session: Session; classType: ClassType }>>;
   getMyCreditBalance(): Promise<CreditBalance>;
   book(cmd: { sessionId: string; idempotencyKey: string }): Promise<BookResult>;
-  cancel(cmd: { bookingId: string; idempotencyKey: string }): Promise<CancelResult>;
+  // Phase 3. acceptLate maps to p_accept_late; only meaningful when lateCancelPolicy = "allow_without_refund".
+  cancel(cmd: { bookingId: string; idempotencyKey: string; acceptLate?: boolean }): Promise<CancelResult>;
 }
 
 export interface AuthUser { id: string; email: string; displayName: string | null; isStaff: boolean }
@@ -137,7 +138,7 @@ sequenceDiagram
   participant DB as RPC book_session (Postgres)
 
   S->>UI: tap "Reservar"
-  UI->>DM: decideBooking(session, myState, rules, clock.now())
+  UI->>DM: evaluateBooking(session, myState, rules, clock.now())
   alt preview refuses
     DM-->>UI: { allowed:false, reason }
     UI-->>S: reason copy, CTA hidden (no RPC call)
@@ -147,7 +148,7 @@ sequenceDiagram
     UI->>APP: reserve({ sessionId, idempotencyKey })
     APP->>REPO: book(cmd)
     REPO->>DB: rpc('book_session', { p_session_id, p_idempotency_key })
-    Note over DB: auth.uid() required (EXECUTE granted to authenticated only)<br/>1. replay? (user_id, idempotency_key) exists → return stored result<br/>2. SELECT session FOR UPDATE<br/>3. same checks as decideBooking (status, window, capacity, duplicate)<br/>4. lock earliest-expiring valid CreditGrant FOR UPDATE<br/>5. INSERT booking + ledger booking_debit (one transaction)
+    Note over DB: auth.uid() required (EXECUTE granted to authenticated only)<br/>1. replay? (user_id, idempotency_key) exists → return stored result<br/>2. SELECT session FOR UPDATE<br/>3. same checks as evaluateBooking (status, window, capacity, duplicate)<br/>4. lock earliest-expiring valid CreditGrant FOR UPDATE<br/>5. INSERT booking + ledger booking_debit (one transaction)
     DB-->>REPO: { ok, code?, booking_id, replayed, remaining_credits }
     REPO-->>APP: BookResult (unknown codes → "unknown")
     APP-->>UI: BookResult
@@ -174,17 +175,23 @@ sequenceDiagram
   participant DB as RPC cancel_booking
 
   S->>UI: "Cancelar reserva"
-  UI->>DM: decideCancellation(booking, session, rules, clock.now())
-  DM-->>UI: allowed + refund? | cancellation_too_late (allowed, no refund) | cancellation_not_allowed
-  UI-->>S: dialog with consequence (refund vs forfeit) or reason
-  S->>UI: "Sí, cancelar"
-  UI->>APP: cancel({ bookingId, idempotencyKey })
-  APP->>DB: rpc('cancel_booking', { p_booking_id, p_idempotency_key })
-  Note over DB: lock booking + session FOR UPDATE<br/>owner check (not_owner) · terminal status → replay current result<br/>≥ window: status cancelled + ledger cancel_refund<br/>< window, before start: late_cancelled, no refund<br/>after start: cancellation_not_allowed<br/>Phase 4: promote first eligible WaitlistEntry in same transaction
+  UI->>DM: evaluateCancellation(booking, session, rules, clock.now())
+  DM-->>UI: refund | late (allow_without_refund) | denied: cancellation_too_late (deny) / cancellation_not_allowed
+  alt denied (Bylou late: deny, or started)
+    UI-->>S: CTA replaced by cancel.closed / reason copy (contact Lou), no RPC call
+  else refund or late
+    UI-->>S: dialog with consequence (refund, or forfeit warning for allow_without_refund)
+    S->>UI: "Sí, cancelar"
+    UI->>APP: cancel({ bookingId, idempotencyKey, acceptLate })
+    APP->>DB: rpc('cancel_booking', { p_booking_id, p_idempotency_key, p_accept_late })
+  end
+  Note over DB: lock session + booking FOR UPDATE<br/>owner check (not_owner) · terminal status → replay current result<br/>≥ window: status cancelled + ledger cancel_refund<br/>< window, policy deny (Bylou): cancellation_too_late, no writes<br/>< window, allow_without_refund: late_cancelled, no refund (needs p_accept_late)<br/>after start: cancellation_not_allowed<br/>Phase 4: promote first eligible WaitlistEntry in same transaction
   DB-->>APP: CancelResult
   APP-->>UI: CancelResult
   UI-->>S: toast cancel.done / late variant, or reason copy
 ```
+
+Bylou runs `lateCancelPolicy: "deny"` (ADR-011), so its late path always ends in `cancel.closed` (contact Lou); the forfeit dialog and `p_accept_late` exist only for studios on the platform default `allow_without_refund`.
 
 Window boundary: a cancellation exactly at `startsAt − cancellationWindowHours` refunds (inclusive). Edge cases are covered by domain unit tests and mirrored SQL tests.
 
@@ -203,13 +210,23 @@ One vocabulary for `booking/domain` decisions, RPC JSON `code`, application resu
 | `no_valid_credit` | book | No non-expired grant with remaining credit | `pack.none` → `pack.none.cta` |
 | `not_found` | book, cancel | Unknown id or not visible | "No encontramos esta clase/reserva" |
 | `not_owner` | cancel | Booking belongs to another user | same copy as `not_found` (no detail leak) |
-| `cancellation_too_late` | cancel (preview + result info) | Inside window: **allowed**, credit forfeited, status `late_cancelled` | warning in dialog; toast late variant |
-| `cancellation_not_allowed` | cancel | Session started, or `lateCancelPolicy = block` | `cancel.closed` → IG contact |
+| `cancellation_too_late` | cancel | Inside window. `deny` (Bylou): **blocked**, no writes. `allow_without_refund`: allowed only with `acceptLate`, credit forfeited, status `late_cancelled` | `deny`: `cancel.closed` → contact Lou. `allow_without_refund`: warning in dialog; toast late variant |
+| `cancellation_not_allowed` | cancel | Session started or cancelled, booking not `confirmed`, attendance marked, or student cancellation disabled | `reason.cancellation_not_allowed` → IG contact |
 | `unauthenticated` | transport | No/expired JWT | → `/reservas/ingresar/?returnTo=` |
 | `forbidden` | transport | Admin RPC by non-staff | "Sin acceso" |
 | `invalid_input` | transport | Malformed args | generic error + retry |
 | `network_error` | transport | Fetch failed / timeout | `error.load` + "Reintentar" (same key) |
 | `unknown` | transport | Unmapped error | generic error, logged to console only |
+
+**Application/RPC-only codes** (not in the domain union `DomainReasonCode`; added to the application result types + copy in the slice that introduces them):
+
+| Code | Produced by | Meaning | UI |
+|---|---|---|---|
+| `capacity_below_bookings` | `admin_update_session` (Phase 4) | New capacity < confirmed bookings | inline field error |
+| `attendance_window_closed` | `mark_attendance` (Phase 4) | Outside `starts_at − 15 min … ends_at + 7 days` | attendance read-only text |
+| `session_not_full` | `join_waitlist` (Phase 4) | Session has free spots | show "Reservar" instead |
+
+Idempotency-key reuse for a different target is **not** a new code: the RPC raises `22023`, mapped to `invalid_input` (DATA_MODEL §5).
 
 Shapes: domain `Decision<C> = { allowed: true; refund?: boolean; warning?: C } | { allowed: false; reason: C }`; RPC returns snake_case JSON mapped 1:1 to `BookResult` / `CancelResult` (§3).
 
@@ -218,7 +235,7 @@ Shapes: domain `Decision<C> = { allowed: true; refund?: boolean; warning?: C } |
 | Route | File | Notes |
 |---|---|---|
 | `/reservas/` | `app/reservas/page.tsx` | Agenda; indexable later, `noindex` while mock |
-| `/reservas/clase/?id=` | `app/reservas/clase/page.tsx` | Session detail |
+| `/reservas/sesion/?id=` | `app/reservas/sesion/page.tsx` | Session detail (implemented, 2.1) |
 | `/reservas/ingresar/` | `app/reservas/ingresar/page.tsx` | OTP sign-in; `?returnTo=` |
 | `/reservas/mis-reservas/` | `app/reservas/mis-reservas/page.tsx` | |
 | `/reservas/confirmada/?id=` | `app/reservas/confirmada/page.tsx` | |
@@ -227,9 +244,9 @@ Shapes: domain `Decision<C> = { allowed: true; refund?: boolean; warning?: C } |
 Query-param page pattern:
 
 1. `page.tsx` is a server component: exports `metadata`, renders `<Suspense fallback={<Skeleton/>}><Container/></Suspense>`. Without `Suspense`, `useSearchParams` fails the export build.
-2. The container (client) reads `useSearchParams().get("id")`, validates it (UUID shape), then fetches. Missing/invalid → `not_found` state.
-3. The exported HTML is a shell (`reservas/clase/index.html`), so direct load and refresh return 200 on GitHub Pages (`trailingSlash: true`).
-4. Internal links use `next/link` (`{ pathname: "/reservas/clase/", query: { id } }`) so `basePath` applies; no `[id]` segments, no 404-redirect SPA hacks.
+2. The container (client) reads `useSearchParams().get("id")`, validates it as a safe opaque token (`^[A-Za-z0-9_-]{1,100}$`; mock ids are `demo-…`, Supabase ids are UUIDs), then fetches. Missing/invalid → `not_found` state.
+3. The exported HTML is a shell (`reservas/sesion/index.html`), so direct load and refresh return 200 on GitHub Pages (`trailingSlash: true`).
+4. Internal links use `next/link` (`{ pathname: "/reservas/sesion/", query: { id } }`) so `basePath` applies; no `[id]` segments, no 404-redirect SPA hacks.
 5. `returnTo` is accepted only if it starts with `/reservas/` (open-redirect guard).
 
 Layouts `app/reservas/layout.tsx` and `app/admin/layout.tsx` are client-provider hosts (theme scope, adapters, auth context, skip link). The root layout and `app/page.tsx` are untouched.
@@ -300,11 +317,4 @@ There is no staging: Pages serves one site and deploys only from `main` (`REPOSI
 
 ## 11. Open issues
 
-| # | Issue | Proposed handling |
-|---|---|---|
-| 1 | `UX_DESIGN.md` S6 / `cancel.closed` assume late cancellation is **blocked**; ADR-011 allows it with forfeit. | Add a `cancel.late` copy key ("Faltan menos de {h} h: si cancelás, la clase no vuelve a tu pack."); keep `cancel.closed` for `cancellation_not_allowed`. UX sheet example "12 h" is illustrative; copy is rule-driven. |
-| 2 | `success.mail` ("Te mandamos los detalles…") implies a confirmation email, which MVP does not send. | Hide the key until transactional email (V2) exists. |
-| 3 | `REPOSITORY_AUDIT.md` integration plan proposes `/reservas/admin/` and `/reservas/auth/callback/`. | Superseded by ADR-003 (`/admin/`, `/reservas/ingresar/`); no callback page needed with OTP. |
-| 4 | Rules enforcement needs DB-resident `StudioRules`; ADR-007 places rules in `config`/brands only. | §7: DB is enforcement source, brand file holds defaults. Align with DATA_MODEL. |
-| 5 | Refund to a CreditGrant that has already expired is worthless. | DATA_MODEL to decide (refund to original grant vs. extend vs. new grant); default: refund to original grant. |
-| 6 | ~~Adapter selected by env presence~~ → resolved by **ADR-013**: explicit `NEXT_PUBLIC_BOOKING_DATA_SOURCE`, config-error state when missing, no landing link before release. | — |
+None open. Resolved (numbers kept for references elsewhere): #1 late-cancel copy → ADR-011/ADR-014 (Bylou `deny` uses `cancel.closed`; `cancel.late` only for `allow_without_refund`) · #2 `success.mail` hidden until V2 email → ADR-014 · #3 admin/callback routes → ADR-003 · #4 DB-resident `StudioRules` → ADR-014 + §7 · #5 refund into an expired grant → DATA_MODEL §6.2/§8 (no refund into an expired grant) · #6 adapter selection → ADR-013.

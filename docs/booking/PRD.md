@@ -35,11 +35,11 @@ Markers: **[OWNER]** = depends on an owner decision (default applied until answe
 
 | Capability | Notes |
 |---|---|
-| Public agenda (no login) with practice + modality filters, day strip, spots left | Studio timezone stated (ADR-011). |
+| Public agenda (no login) with practice + modality filters, week view grouped by day (shipped in 2.1; day strip is a possible V2 refinement), spots left | Studio timezone stated (ADR-011). |
 | Session detail by deep link (`?id=`) | ADR-003. |
 | Email OTP sign-in | ADR-004. |
 | Atomic, idempotent booking; 1 credit per booking | ADR-005, ADR-011. |
-| Cancellation with configurable window; late cancel forfeits credit | ADR-011 **[OWNER]**. |
+| Cancellation with configurable window and late policy | ADR-011 (Accepted for Bylou: 24 h free, late cancel blocked → contact Lou; platform option `allow_without_refund` forfeits the credit). |
 | My bookings: upcoming, history (attended / no show / cancelled), credit balance + expiry | |
 | Online meeting link / in-person address revealed only to booked students | ADR-005 **[OWNER]** for address. |
 | Admin: class types, single + weekly-recurring sessions, capacity, cancel session, roster, attendance | |
@@ -72,15 +72,15 @@ Defaults from ADR-011 are used in criteria (24 h free cancel, booking opens 30 d
 
 | ID | Story | Acceptance criteria | Phase |
 |---|---|---|---|
-| ST-01 | As a visitor, I see upcoming sessions without signing in. | 1. Lists `scheduled` sessions from now to the booking horizon, grouped by day in the studio timezone. 2. Each card shows time, duration, practice, modality, instructor, and "Quedan N lugares" / "Completa" in text. 3. Cancelled and past sessions are not listed; a started session today shows "En curso" without CTA. 4. Filters by practice and modality persist across visits. 5. Empty day shows `empty.day` + "Ver próxima fecha". | 2 |
-| ST-02 | As a visitor, I open a session from a shared link. | 1. `/reservas/clase/?id=<id>` renders the session after direct load and browser refresh. 2. Unknown or missing `id` shows a not-found state with a link to the agenda. | 2 |
+| ST-01 | As a visitor, I see upcoming sessions without signing in. | 1. Lists `scheduled` sessions from now to the booking horizon, grouped by day in the studio timezone. 2. Each card shows time, duration, practice, modality, instructor, and "Quedan N lugares" / "Completa" in text. 3. Past and studio-cancelled sessions in the displayed range are listed with a non-bookable text label ("Finalizada" / "Cancelada", no CTA); a started session shows "En curso" without CTA. 4. Filters by practice and modality persist across visits. *(Practice filter shipped in 2.1; modality filter and remembering the filter are a pending slice.)* 5. Empty week shows `empty.week` with week navigation (as built in 2.1; per-day empty state only applies if a day strip is added later). | 2 |
+| ST-02 | As a visitor, I open a session from a shared link. | 1. `/reservas/sesion/?id=<id>` renders the session after direct load and browser refresh. 2. Unknown or missing `id` shows a not-found state with a link to the agenda. | 2 |
 | ST-03 | As a new or returning student, I sign in with a 6-digit email code. | 1. Email → code → signed in, on `/reservas/ingresar/`. 2. First sign-in asks name (required) and phone (optional). 3. After sign-in, the user returns to the interrupted action (`returnTo` restricted to same-origin `/reservas/` paths). 4. Wrong/expired code shows an inline error and "Reenviar código". | 3 |
 | ST-04 | As a student with credit, I reserve a place. | 1. "Reservar" opens a confirm sheet showing date, time, modality, credit use (`sheet.credit`) and policy (`sheet.policy`). 2. "Confirmar reserva" creates exactly one `confirmed` Booking and one `booking_debit` ledger entry from the earliest-expiring valid CreditGrant. 3. Success navigates to `/reservas/confirmada/?id=`. 4. Spots shown decrease on next load. | 3 |
 | ST-05 | As a student on a flaky connection, retrying never double-books me. | 1. Double tap, retry after timeout, or replayed request with the same `idempotencyKey` returns the original result. 2. Never more than one active Booking per student per session, never more than one debit for it. | 3 |
 | ST-06 | As a student, I understand why I cannot book. | Each refusal code maps to a specific message and one next action: `session_full` → `error.conflict` (+ waitlist offer if flag on); `no_valid_credit` → `pack.none` + "Coordiná tu pack con Lou"; `already_booked` → link to "Mis reservas"; `booking_not_open` / `booking_closed` / `session_started` / `session_cancelled` → explanatory text, CTA hidden. | 3 |
 | ST-07 | As a student, I see my upcoming bookings and history. | 1. Tabs "Próximas" / "Historial". 2. History labels: Asististe / No asististe / Cancelada (incl. late) in text. 3. Only my own bookings are ever returned (see SE-02). | 3 |
 | ST-08 | As a student, I see my remaining credits and when they expire. | 1. Balance = sum of non-expired grant remainders; nearest expiry date shown. 2. Expired pack shows `pack.expired`. 3. Matches the ledger exactly. | 3 |
-| ST-09 | As a student, I cancel a booking under clear rules. | 1. ≥24 h before start: status `cancelled`, `cancel_refund` ledger entry, spot freed, toast `cancel.done`. 2. <24 h and before start: dialog warns the credit is not refunded (`cancellation_too_late`); confirming sets `late_cancelled`, spot freed, no refund. 3. After start: `cancellation_not_allowed`, CTA replaced by text + IG contact. 4. Repeating a cancel never refunds twice. | 3 **[OWNER]** |
+| ST-09 | As a student, I cancel a booking under clear rules. | 1. ≥24 h before start: status `cancelled`, `cancel_refund` ledger entry, spot freed, toast `cancel.done`. 2. <24 h and before start, Bylou (`lateCancelPolicy: "deny"`): cancellation is blocked with `cancellation_too_late`, no writes; CTA replaced by `cancel.closed` text pointing to contacting Lou. 2b. Studios using `allow_without_refund` instead: dialog warns the credit is not refunded (`cancellation_too_late`); confirming sets `late_cancelled`, spot freed, no refund. 3. After start: `cancellation_not_allowed`, CTA replaced by text + IG contact. 4. Repeating a cancel never refunds twice. | 3 |
 | ST-10 | As a booked student, I get the online link or address. | 1. Meeting URL / address readable only with an active booking (RLS). 2. "Entrar a la clase" button enabled 15 min before start (UI only). | 3 **[OWNER]** address |
 | ST-11 | As a student, I add a booked class to my calendar. | Downloads a valid `.ics` with UTC start/end and title; no meeting URL inside if not booked. | 3 |
 | ST-12 | As a student, I join the waitlist of a full session. | 1. "Anotarme en la lista" creates a `waiting` WaitlistEntry (one per student per session). 2. Shows "lugar N". 3. "Salir de la lista" → `left`. 4. On a freed spot, the first eligible entry is `promoted` (booking created + debit) per ADR-011; ineligible ones are `skipped`. | 4 **[FLAG] [OWNER]** |
@@ -134,7 +134,7 @@ Test layers: **Unit** = Vitest on `booking/domain` / `booking/application` · **
 
 ## 6. Owner questions (most decision-relevant first)
 
-1. **Cancellation rules (ADR-011):** keep 24 h free cancellation, and allow late cancellation with credit forfeited (vs. blocking it)? Waitlist auto-promotion OK?
+1. ~~**Cancellation rules (ADR-011):** 24 h free cancellation; late cancellation forfeit vs. block?~~ **Answered 2026-10-13:** 24 h, then blocked (contact Lou). Still open: waitlist auto-promotion OK?
 2. **1:1 slots:** will you publish 1:1 availability as bookable slots for pack holders (replacing "horario a medida")?
 3. **Pack rule:** are the 4 credits usable freely within 30 days, or limited to 1 per week?
 4. **Supabase + email:** approve creating a free Supabase project and a transactional email sender (needed for sign-in codes in production)?

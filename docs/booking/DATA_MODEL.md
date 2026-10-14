@@ -11,7 +11,7 @@ Updated 2026-10-13 · Phase 1 design. Implements ADR-002, ADR-004, ADR-005, ADR-
 | Vocabulary | Table | Phase | Notes |
 |---|---|---|---|
 | Profile | `profiles` | 3 | 1:1 with `auth.users`; holds `role`. |
-| StudioRules | `studio_settings` | 3 | Singleton row. DB is the enforcement source; brand config only seeds defaults (ARCHITECTURE §11 #4). |
+| StudioRules | `studio_settings` | 3 | Singleton row. DB is the enforcement source; brand config only seeds defaults (ADR-014). |
 | ClassType | `class_types` | 3 | Catalog. |
 | Session | `sessions` | 3 | Public-safe columns only, plus a `confirmed_count` counter. |
 | — | `session_private_details` | 3 | `meeting_url`, `address`: staff + confirmed attendees only. |
@@ -99,13 +99,16 @@ create table public.studio_settings (
   booking_opens_days           int  not null default 30  check (booking_opens_days between 1 and 365),
   booking_closes_minutes       int  not null default 0   check (booking_closes_minutes between 0 and 1440),
   cancellation_window_hours    int  not null default 24  check (cancellation_window_hours between 0 and 168),
-  late_cancel_policy           text not null default 'forfeit' check (late_cancel_policy in ('forfeit', 'block')),
+  late_cancel_policy           text not null default 'allow_without_refund'   -- platform default (ADR-011)
+                                    check (late_cancel_policy in ('allow_without_refund', 'deny')),  -- = domain LateCancelPolicy
   student_cancellation_enabled boolean not null default true,
   credits_per_booking          int  not null default 1   check (credits_per_booking between 1 and 10),
   waitlist_enabled             boolean not null default false,
   updated_at                   timestamptz not null default now(),
   updated_by                   uuid references public.profiles(id)
 );
+-- Singleton row (migration 3 + seed) is seeded from brands/bylou rules (ADR-014): Bylou = 24 h + 'deny'.
+--   insert into public.studio_settings (id, cancellation_window_hours, late_cancel_policy) values (1, 24, 'deny');
 -- Trigger validates timezone: exists (select 1 from pg_catalog.pg_timezone_names where name = new.timezone).
 -- (A CHECK cannot query a catalog view.)
 
@@ -555,7 +558,7 @@ end $$;
 
 ### 6.2 `cancel_booking(p_booking_id uuid, p_idempotency_key uuid default null, p_accept_late boolean default false) → jsonb`
 
-Grant: `authenticated`. Matches ARCHITECTURE `cancel({ bookingId, idempotencyKey })`; the key is recorded (`cancel_request_key`) but replay is **state-based**: a booking can leave `confirmed` only once, so a repeated cancel returns the current outcome and never refunds twice (also enforced by `ledger_one_refund_per_booking`).
+Grant: `authenticated`. Matches ARCHITECTURE `cancel({ bookingId, idempotencyKey, acceptLate })`; the key is recorded (`cancel_request_key`) but replay is **state-based**: a booking can leave `confirmed` only once, so a repeated cancel returns the current outcome and never refunds twice (also enforced by `ledger_one_refund_per_booking`).
 
 | Situation | Result |
 |---|---|
@@ -563,12 +566,12 @@ Grant: `authenticated`. Matches ARCHITECTURE `cancel({ bookingId, idempotencyKey
 | Someone else's booking | `not_owner` (UI shows the `not_found` copy) |
 | Already `cancelled` / `late_cancelled` | `ok: true, replayed: true`, current `status`, `refunded` |
 | Session started (`now ≥ starts_at`), student cancellation disabled, or attendance already marked | `cancellation_not_allowed` |
-| Inside window, policy `block` | `cancellation_not_allowed` |
-| Inside window, policy `forfeit`, `p_accept_late = false` | `cancellation_too_late` (`ok: false`, no writes, `{ refund: false, confirm_required: true }`) → UI warns, re-calls with `p_accept_late = true` |
-| Inside window, policy `forfeit`, accepted | `late_cancelled`, no refund, spot freed |
+| Inside window, policy `deny` (**Bylou**) | `cancellation_too_late` (`ok: false`, no writes, `{ refund: false, confirm_required: false }`) → UI shows `cancel.closed` (contact Lou); `p_accept_late` is ignored |
+| Inside window, policy `allow_without_refund`, `p_accept_late = false` | `cancellation_too_late` (`ok: false`, no writes, `{ refund: false, confirm_required: true }`) → UI warns, re-calls with `p_accept_late = true` |
+| Inside window, policy `allow_without_refund`, accepted | `late_cancelled`, no refund, spot freed |
 | Outside window (`now ≤ starts_at − cancellation_window_hours`) | `cancelled`; refund to the original grant **if it is still valid now** (`expires_at > now()`), else `refunded: false` |
 
-`p_accept_late` guards against a stale screen: a cancel rendered at 24h05m and tapped at 23h55m must not silently forfeit a credit.
+`p_accept_late` is only relevant when `late_cancel_policy = 'allow_without_refund'` (kept for platform studios; Bylou never sends it). It guards against a stale screen: a cancel rendered at 24h05m and tapped at 23h55m must not silently forfeit a credit.
 
 ```sql
 create function public.cancel_booking(p_booking_id uuid, p_idempotency_key uuid default null,
@@ -604,7 +607,9 @@ begin
   end if;
 
   v_late := now() > v_session.starts_at - make_interval(hours => v_rules.cancellation_window_hours);
-  if v_late and v_rules.late_cancel_policy = 'block' then return private.fail('cancellation_not_allowed'); end if;
+  if v_late and v_rules.late_cancel_policy = 'deny' then                 -- Bylou: block, contact the studio
+    return private.fail('cancellation_too_late', '{"refund": false, "confirm_required": false}');
+  end if;
   if v_late and not p_accept_late then
     return private.fail('cancellation_too_late', '{"refund": false, "confirm_required": true}');
   end if;
@@ -866,8 +871,9 @@ Tooling: **pgTAP** via `supabase test db` (files in `supabase/tests/database/*.t
 | C6 | C | `cancel_booking` twice | Second `replayed`, exactly 1 `cancel_refund` |
 | C7 | C | `grant_credits` twice with same key; `create_session` twice with same request key | One grant + one `grant` entry; same session ids |
 | D1 | D | Cancel outside window | `cancelled`, `refunded`, grant +1, ledger refund, count −1, row kept |
-| D2 | D | Cancel inside window without / with `p_accept_late` | `cancellation_too_late` + no writes / `late_cancelled`, no refund, count −1 |
-| D3 | D | Policy `block` inside window; after start; attendance marked | `cancellation_not_allowed` |
+| D2 | D | Policy `allow_without_refund`: cancel inside window without / with `p_accept_late` | `cancellation_too_late` (`confirm_required: true`) + no writes / `late_cancelled`, no refund, count −1 |
+| D2b | D | Policy `deny` (Bylou seed): cancel inside window, with and without `p_accept_late` | `cancellation_too_late` (`confirm_required: false`), no writes, count unchanged |
+| D3 | D | After start; attendance marked; student cancellation disabled | `cancellation_not_allowed` |
 | D4 | D | Original grant expired before an in-window cancel | `cancelled`, `refunded: false`, no ledger row |
 | D5 | D | `admin_cancel_session` with mixed valid/expired grants | All bookings cancelled; refunds for valid; `refunds_skipped` lists expired; count 0 |
 | D6 | D (Ph. 4) | Cancel with waitlist [no-credit user, eligible user] | First `skipped(no_valid_credit)`, second promoted with debit; count unchanged net |
@@ -896,13 +902,12 @@ Tooling: **pgTAP** via `supabase test db` (files in `supabase/tests/database/*.t
 
 ## 13. Open issues
 
+Resolved and removed (numbers kept for references): #1 RPC-only codes → ARCHITECTURE §5 application/RPC codes; #2 cancellation rule → ADR-011 Accepted (Bylou 24 h + `deny`; the waitlist auto-promotion rule stays provisional, ROADMAP 4.4 🔒); #5 `p_accept_late` → ARCHITECTURE §3 `cancel({ …, acceptLate })`, only used with `allow_without_refund`.
+
 | # | Issue | Proposed handling |
 |---|---|---|
-| 1 | Codes beyond the shared vocabulary: admin-only `capacity_below_bookings`, `attendance_window_closed`; Phase 4 `session_not_full`. Idempotency-key misuse is mapped to `invalid_input` instead of a new code. | Add the three to the domain union + copy in the slice that introduces them (ARCHITECTURE §5 rule). |
-| 2 | ADR-011 is still **Proposed** (24 h window, late = forfeit, auto-promotion rule). | Schema supports both `forfeit` and `block`; values live in `studio_settings`. Owner confirms before Phase 3 UI copy. |
 | 3 | Credit validity is checked against the **session start**, not the booking time. | Confirm with owner; the alternative is a one-line change in the grant filter. |
 | 4 | Admin-cancelled session whose student's grant already expired: no refund possible. | MVP returns `refunds_skipped`; staff issues a 1-credit grant manually. Alternative: auto compensation grant (adds a setting). |
-| 5 | `cancel_booking` adds `p_accept_late` (not in ARCHITECTURE's `cancel(cmd)`). | Adapter sends `p_accept_late: true` only after the user confirms the PRD ST-09 warning dialog. |
 | 6 | No notifications (promotion, session cancel). | Phase 4+: DB webhook / Edge Function + SMTP; out of this doc. |
 | 7 | Right to erasure (Ley 25.326) vs. `on delete restrict` history. | Define an anonymization RPC (null name/phone, replace email) before production. |
 | 8 | Single tenant per Supabase project. | Multi-tenant later requires `studio_id` on every table and policy rewrite; documented, not built. |

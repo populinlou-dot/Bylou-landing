@@ -16,6 +16,7 @@ import {
   toEpochMs,
   type Booking,
   type CreditGrant,
+  type Modality,
   type StudioRules,
 } from "../../domain"
 import {
@@ -56,11 +57,45 @@ const DEMO_PRIVATE_DETAILS: Record<"online" | "in_person", SessionPrivateDetails
   in_person: { meetingUrl: null, address: "Calle Falsa 123 (demo)", instructions: null },
 }
 
+/** Admin-only class type columns (`class_types.default_modality`, `is_published`, `sort_order`). */
+export interface MockClassTypeSettings {
+  defaultModality: Modality
+  /** False = archived/draft: hidden from students, unbookable (mirrors class_type_is_published). */
+  isPublished: boolean
+  sortOrder: number
+}
+
 interface MockState extends DemoSeed {
   grants: CreditGrant[]
   /** (userId|key) → booking id, mirrors the bookings_idempotency unique key. */
   keys: Map<string, string>
   refunded: Set<string>
+  classTypeSettings: Record<string, MockClassTypeSettings>
+  /** Details entered by staff for sessions created in the demo; seeded sessions use DEMO_PRIVATE_DETAILS. */
+  privateDetailsBySessionId: Record<string, SessionPrivateDetails>
+  /** create_session request key → session ids (series replay). */
+  seriesKeys: Map<string, string[]>
+}
+
+/** The live in-memory studio shared with MockAdminRepository (mock only). */
+export type MockStudio = Pick<
+  MockState,
+  | "sessions"
+  | "classTypes"
+  | "bookings"
+  | "instructorBySessionId"
+  | "grants"
+  | "refunded"
+  | "classTypeSettings"
+  | "privateDetailsBySessionId"
+  | "seriesKeys"
+> & { rules: StudioRules }
+
+/** Demo defaults for the seeded class types (all published). */
+const DEMO_CLASS_TYPE_MODALITY: Record<string, Modality> = {
+  "demo-individual": "in_person",
+  "demo-grupal": "in_person",
+  "demo-meditacion": "online",
 }
 
 export class MockBookingRepository implements BookingRepository {
@@ -76,7 +111,8 @@ export class MockBookingRepository implements BookingRepository {
 
   async listClassTypes(): Promise<ClassTypeView[]> {
     await this.delay()
-    return structuredClone(this.data().classTypes)
+    const { classTypes } = this.data()
+    return structuredClone(classTypes.filter((ct) => this.isPublishedType(ct.id)))
   }
 
   async listSessions(range: InstantRange): Promise<SessionAvailability[]> {
@@ -102,7 +138,7 @@ export class MockBookingRepository implements BookingRepository {
     const userId = this.userId()
     const session = this.data().sessions.find((s) => s.id === sessionId)
     if (!userId || !session || !this.myConfirmedBooking(sessionId, userId)) return null
-    return { ...DEMO_PRIVATE_DETAILS[session.modality] }
+    return this.privateDetailsOf(session)
   }
 
   async listMyBookings(): Promise<MyBooking[]> {
@@ -122,7 +158,7 @@ export class MockBookingRepository implements BookingRepository {
             classType,
             instructorName: instructorBySessionId[session.id] ?? null,
             refunded: refunded.has(booking.id),
-            privateDetails: booking.status === "confirmed" ? DEMO_PRIVATE_DETAILS[session.modality] : null,
+            privateDetails: booking.status === "confirmed" ? this.privateDetailsOf(session) : null,
           }),
         ]
       })
@@ -148,7 +184,8 @@ export class MockBookingRepository implements BookingRepository {
     }
 
     const session = state.sessions.find((s) => s.id === cmd.sessionId)
-    if (!session) return { ok: false, code: "not_found" }
+    // Sessions of an archived class type are not bookable (book_session → not_found).
+    if (!session || !this.isPublishedType(session.classTypeId)) return { ok: false, code: "not_found" }
     const decision = evaluateBooking({
       session,
       userId,
@@ -215,8 +252,20 @@ export class MockBookingRepository implements BookingRepository {
    * Mock-only: the live in-memory studio (sessions, bookings) shared with MockAdminRepository,
    * so a demo booking made on /reservas/ shows up in the /admin/ roster of the same page load.
    */
-  sharedState(): Pick<MockState, "sessions" | "classTypes" | "bookings" | "instructorBySessionId"> {
-    return this.data()
+  sharedState(): MockStudio {
+    const state = this.data()
+    return {
+      sessions: state.sessions,
+      classTypes: state.classTypes,
+      bookings: state.bookings,
+      instructorBySessionId: state.instructorBySessionId,
+      grants: state.grants,
+      refunded: state.refunded,
+      classTypeSettings: state.classTypeSettings,
+      privateDetailsBySessionId: state.privateDetailsBySessionId,
+      seriesKeys: state.seriesKeys,
+      rules: this.options.rules,
+    }
   }
 
   /** Seeded once per instance from the clock, so ids stay stable while the page is open. */
@@ -255,7 +304,21 @@ export class MockBookingRepository implements BookingRepository {
         createdAt: new Date(toEpochMs(past.startsAt) - 2 * DAY_MS).toISOString(),
       })
     }
-    return { ...seed, grants: [grant], keys: new Map(), refunded: new Set() }
+    const classTypeSettings = Object.fromEntries(
+      seed.classTypes.map((ct, index): [string, MockClassTypeSettings] => [
+        ct.id,
+        { defaultModality: DEMO_CLASS_TYPE_MODALITY[ct.id] ?? "in_person", isPublished: true, sortOrder: index + 1 },
+      ]),
+    )
+    return {
+      ...seed,
+      grants: [grant],
+      keys: new Map(),
+      refunded: new Set(),
+      classTypeSettings,
+      privateDetailsBySessionId: {},
+      seriesKeys: new Map(),
+    }
   }
 
   private balanceOf(userId: string): CreditBalance {
@@ -292,12 +355,24 @@ export class MockBookingRepository implements BookingRepository {
     return this.data().bookings.find((b) => b.sessionId === sessionId && b.userId === userId && b.status === "confirmed")
   }
 
+  private isPublishedType(classTypeId: string): boolean {
+    return this.data().classTypeSettings[classTypeId]?.isPublished ?? false
+  }
+
+  private privateDetailsOf(session: { id: string; modality: Modality }): SessionPrivateDetails {
+    return { ...(this.data().privateDetailsBySessionId[session.id] ?? DEMO_PRIVATE_DETAILS[session.modality]) }
+  }
+
   private toAvailability(id: string): SessionAvailability | null {
     const { sessions, classTypes, bookings, instructorBySessionId } = this.data()
     const session = sessions.find((s) => s.id === id)
     const classType = session && classTypes.find((ct) => ct.id === session.classTypeId)
     if (!session || !classType) return null
     const userId = this.userId()
+    // RLS mirror: sessions of an archived class type stay visible only to students who booked them.
+    if (!this.isPublishedType(classType.id) && !(userId && bookings.some((b) => b.sessionId === id && b.userId === userId))) {
+      return null
+    }
     return structuredClone({
       session,
       classType,

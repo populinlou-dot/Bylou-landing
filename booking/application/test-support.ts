@@ -1,6 +1,7 @@
 /** Test helpers for application use cases (no test-runner imports, no adapters). */
 import type { Session, StudioRules } from "../domain"
 import type {
+  AdminClassTypeView,
   AdminRepository,
   AdminSessionView,
   AuthPort,
@@ -201,10 +202,44 @@ export function rosterEntry(id: string, overrides: Partial<RosterEntry> = {}): R
   }
 }
 
+export const ADMIN_CLASS_TYPES: AdminClassTypeView[] = [
+  {
+    id: "ct-individual",
+    name: "Clase individual",
+    description: null,
+    durationMinutes: 60,
+    defaultCapacity: 1,
+    defaultModality: "online",
+    isPublished: true,
+    sortOrder: 1,
+  },
+  {
+    id: "ct-grupal",
+    name: "Clase grupal",
+    description: "Grupo reducido",
+    durationMinutes: 75,
+    defaultCapacity: 8,
+    defaultModality: "in_person",
+    isPublished: true,
+    sortOrder: 2,
+  },
+  {
+    id: "ct-archivada",
+    name: "Práctica archivada",
+    description: null,
+    durationMinutes: 60,
+    defaultCapacity: 6,
+    defaultModality: "in_person",
+    isPublished: false,
+    sortOrder: 3,
+  },
+]
+
 export interface FakeAdminOptions {
   role?: StaffRole | null
   sessions?: AdminSessionView[]
   roster?: Record<string, RosterEntry[]>
+  classTypes?: AdminClassTypeView[]
 }
 
 /**
@@ -235,6 +270,28 @@ export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminReposi
     async markAttendance(cmd) {
       calls.push(`markAttendance ${cmd.bookingId} ${cmd.attendance}`)
       return { ok: true, bookingId: cmd.bookingId, attendance: cmd.attendance }
+    },
+    async listClassTypes() {
+      calls.push("listClassTypes")
+      return options.classTypes ?? ADMIN_CLASS_TYPES
+    },
+    async saveClassType(cmd) {
+      calls.push(`saveClassType ${cmd.id}`)
+      return { ok: true, classTypeId: cmd.id, created: true, isPublished: cmd.isPublished, upcomingSessions: 0 }
+    },
+    async createSessions(cmd) {
+      calls.push(`createSessions ${cmd.requestKey} ${cmd.repeatWeeks}`)
+      return { ok: true, sessionIds: Array.from({ length: cmd.repeatWeeks }, (_, i) => `new-${i + 1}`), replayed: false }
+    },
+    async updateSessionCapacity(cmd) {
+      calls.push(`updateSessionCapacity ${cmd.sessionId} ${cmd.capacity}`)
+      const confirmedCount = sessions.find((s) => s.session.id === cmd.sessionId)?.confirmedCount ?? 0
+      return { ok: true, sessionId: cmd.sessionId, capacity: cmd.capacity, confirmedCount, changed: true }
+    },
+    async cancelSession(cmd) {
+      calls.push(`cancelSession ${cmd.sessionId}`)
+      const cancelledBookings = sessions.find((s) => s.session.id === cmd.sessionId)?.confirmedCount ?? 0
+      return { ok: true, sessionId: cmd.sessionId, cancelledBookings, refunded: cancelledBookings, refundsSkipped: [], replayed: false }
     },
   }
 }

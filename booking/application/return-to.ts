@@ -7,6 +7,8 @@ export const SIGN_IN_PATH = "/reservas/ingresar/"
 export const MY_BOOKINGS_PATH = "/reservas/mis-reservas/"
 export const ADMIN_PATH = "/admin/"
 export const ADMIN_SESSION_PATH = "/admin/clase/"
+export const ADMIN_NEW_SESSION_PATH = "/admin/nueva-clase/"
+export const ADMIN_CLASS_TYPES_PATH = "/admin/practicas/"
 
 /** Sections a sign-in may return to. The admin shell is public; RLS/RPC protect its data (ADR-003). */
 const RETURN_PREFIXES = [AGENDA_PATH, ADMIN_PATH] as const
@@ -53,4 +55,9 @@ export function adminDayHref(date?: string | null): string {
 /** Admin roster + attendance of one session (`/admin/clase/?id=`). */
 export function adminSessionHref(sessionId: string): string {
   return `${ADMIN_SESSION_PATH}?${new URLSearchParams({ id: sessionId }).toString()}`
+}
+
+/** New session form (`/admin/nueva-clase/?dia=`), prefilled with a studio-local day. */
+export function adminNewSessionHref(date?: string | null): string {
+  return date ? `${ADMIN_NEW_SESSION_PATH}?${new URLSearchParams({ dia: date }).toString()}` : ADMIN_NEW_SESSION_PATH
 }

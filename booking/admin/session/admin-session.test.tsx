@@ -87,7 +87,7 @@ describe("Admin attendance (AD-07: never optimistic)", () => {
 
     resolve({ ok: true, bookingId: "b-email", attendance: "no_show" })
     await waitFor(() => expect(within(row).getByRole("button", { name: "Ausente" }).getAttribute("aria-pressed")).toBe("true"))
-    expect(screen.getByRole("status").textContent).toBe("Asistencia guardada.")
+    expect(screen.getAllByRole("status").map((s) => s.textContent)).toContain("Asistencia guardada.")
     expect(admin.markAttendance).toHaveBeenCalledTimes(1)
   })
 

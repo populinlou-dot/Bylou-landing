@@ -57,6 +57,15 @@ export class Actor {
     return rows[0].r
   }
 
+  /** Staff-only RPC (AD-05.1); a student actor gets 42501 forbidden. */
+  async updateCapacity(sessionId: string, capacity: number): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.admin_update_session($1, $2) as r", [
+      sessionId,
+      capacity,
+    ])
+    return rows[0].r
+  }
+
   end(): Promise<void> {
     return this.client.end()
   }

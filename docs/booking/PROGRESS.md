@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Phase 4.1 (admin shell + Hoy + roster + attendance) — DONE.** Next: Phase 4.2 (class types, sessions, recurring, capacity, cancel). Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 4.2 (class types, sessions, weekly series, capacity, cancel) — DONE.** Next: Phase 4.3 (students + credits). Phase 4.1 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -21,6 +21,8 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | Hosted Supabase setup guide (owner approved 2026-10-14) | devops writer | `SUPABASE_SETUP.md` | done (`f498e7a`) — **owner action pending** |
 | Browser E2E vs local Supabase (orchestrator, 2026-10-14) | orchestrator | — | PASS: request code → Mailpit → sign in → book (9→8) → address revealed → cancel >24 h → refund (8→9), history updated |
 | **Phase 4.1** admin shell, Hoy, roster, attendance (ADR-015) | frontend engineer | `app/admin/**`, `booking/admin/**`, `app/_booking/`, pgTAP `06` | done: unit 346/346, pgTAP 237/237, races 6/6; orchestrator browser E2E vs local Supabase: anon → sign-in link, staff → Hoy + roster, attendance `no_show` persisted, student → "Sin acceso" |
+
+| **Phase 4.2** class types, sessions, weekly series, capacity, cancel (ADR-016) | frontend + backend engineer | `20261014000900_admin_sessions.sql`, `app/admin/{practicas,nueva-clase}`, `booking/admin/**` | done: unit 411/411, pgTAP 306/306, races 7/7, db lint clean; orchestrator browser E2E vs local Supabase: 4-week series created at 09:30 ART, capacity 2→6, cancel → `cancelled`, other occurrences untouched |
 
 Phase 0 workstreams:
 
@@ -67,6 +69,8 @@ Carried over from a previous local setup session; intentionally left uncommitted
 
 ## UX backlog (observed in browser E2E)
 
+- Sign-in: email typed right after page load is sometimes wiped (input remounts); dev console shows a `useId` hydration mismatch on the sign-in form. Fix before release.
+- Admin new-session form: modality radios expose `in_person`/`online` as accessible names; use the visible labels.
 - Flaky test: `booking/ui/sign-in/sign-in.test.tsx` "goes email → code → returnTo" focus assertion fails ~2/15 full runs (pre-existing).
 - Agenda card for a past session the student attended says "Ya tenés esta clase reservada"; should read as attended/past.
 - After booking from the agenda, the card behind the sheet still shows the old spots count until refresh.
@@ -95,7 +99,7 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 ## Next step
 
 1. **Owner:** follow `docs/booking/SUPABASE_SETUP.md`; send back only the project ref + checklist (never keys).
-2. ~~Phase 4.1~~ done. **Phase 4.2** sessions: class types (`admin_upsert_class_type`), single + weekly-recurring creation, capacity edit (`admin_update_session`, capacity ≥ confirmed), cancel session with refunds. Then **4.3** students + credits (`admin_adjust_credits` with reason, ledger view, book/cancel on behalf).
+2. ~~Phase 4.1~~, ~~4.2~~ done. **Phase 4.3** students + credits: search, grant pack (UI over `grant_credits`), `admin_adjust_credits` with reason, ledger view, book/cancel on behalf (AD-08…AD-10).
 3. **Phase 4.2** waitlist (FIFO, Bylou deny policy) + credit-expiry job (pg_cron) — needs owner answer on auto-promotion.
 4. Fix UX backlog items above.
 

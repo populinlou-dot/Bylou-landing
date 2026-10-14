@@ -1,10 +1,25 @@
 /**
- * Pure mapping for the staff side (Phase 4.1): RLS-scoped table reads (staff see every row
- * through `private.is_staff()` policies) and the `mark_attendance` RPC envelope
- * (migration 20261014000700). Unknown codes become "unknown".
+ * Pure mapping for the staff side (Phase 4.1/4.2): RLS-scoped table reads (staff see every row
+ * through `private.is_staff()` policies) and the admin RPC envelopes (`mark_attendance`,
+ * `create_session`, `admin_upsert_class_type`, `admin_update_session`, `admin_cancel_session`;
+ * migrations 20261014000700 and 20261014000900). Unknown shapes or codes become "unknown".
  */
 import type { Booking, Modality } from "../../domain"
-import type { AdminSessionView, AttendanceCode, AttendanceMark, MarkAttendanceResult, RosterEntry, StaffRole } from "../../application"
+import {
+  UPDATE_SESSION_CODES,
+  type AdminClassTypeView,
+  type AdminSessionView,
+  type AttendanceCode,
+  type AttendanceMark,
+  type CancelSessionResult,
+  type CreateSessionsResult,
+  type MarkAttendanceResult,
+  type RosterEntry,
+  type SaveClassTypeResult,
+  type StaffRole,
+  type UpdateSessionCode,
+  type UpdateSessionResult,
+} from "../../application"
 import { iso } from "./mappers"
 
 export interface AdminSessionRow {
@@ -82,5 +97,100 @@ export function mapAttendanceRpc(data: unknown): MarkAttendanceResult {
   if (data.ok === false && typeof data.code === "string" && ATTENDANCE_CODES.includes(data.code)) {
     return { ok: false, code: data.code as AttendanceCode }
   }
+  return { ok: false, code: "unknown" }
+}
+
+export interface AdminClassTypeRow {
+  id: string
+  name: string
+  description: string | null
+  default_duration_minutes: number
+  default_capacity: number
+  default_modality: Modality
+  is_published: boolean
+  sort_order: number
+}
+
+export function toAdminClassTypeView(row: AdminClassTypeRow): AdminClassTypeView {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    durationMinutes: row.default_duration_minutes,
+    defaultCapacity: row.default_capacity,
+    defaultModality: row.default_modality,
+    isPublished: row.is_published,
+    sortOrder: row.sort_order,
+  }
+}
+
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((v) => typeof v === "string")
+
+/** `admin_upsert_class_type` jsonb → SaveClassTypeResult (it has no business refusals). */
+export function mapSaveClassTypeRpc(data: unknown): SaveClassTypeResult {
+  if (isObject(data) && data.ok === true && typeof data.class_type_id === "string" && typeof data.is_published === "boolean") {
+    return {
+      ok: true,
+      classTypeId: data.class_type_id,
+      created: data.created === true,
+      isPublished: data.is_published,
+      upcomingSessions: isCount(data.upcoming_sessions) ? data.upcoming_sessions : 0,
+    }
+  }
+  return { ok: false, code: "unknown" }
+}
+
+/** `create_session` jsonb → CreateSessionsResult. */
+export function mapCreateSessionsRpc(data: unknown): CreateSessionsResult {
+  if (!isObject(data)) return { ok: false, code: "unknown" }
+  if (data.ok === true && isStringArray(data.session_ids) && data.session_ids.length > 0) {
+    return { ok: true, sessionIds: data.session_ids, replayed: data.replayed === true }
+  }
+  if (data.ok === false && data.code === "not_found") return { ok: false, code: "not_found" }
+  return { ok: false, code: "unknown" }
+}
+
+const UPDATE_CODES: readonly string[] = UPDATE_SESSION_CODES
+
+/** `admin_update_session` jsonb → UpdateSessionResult. */
+export function mapUpdateSessionRpc(data: unknown): UpdateSessionResult {
+  if (!isObject(data)) return { ok: false, code: "unknown" }
+  if (data.ok === true && typeof data.session_id === "string" && isCount(data.capacity) && isCount(data.confirmed_count)) {
+    return {
+      ok: true,
+      sessionId: data.session_id,
+      capacity: data.capacity,
+      confirmedCount: data.confirmed_count,
+      changed: data.changed === true,
+    }
+  }
+  if (data.ok === false && typeof data.code === "string" && UPDATE_CODES.includes(data.code)) {
+    const code = data.code as UpdateSessionCode
+    return isCount(data.confirmed_count) ? { ok: false, code, confirmedCount: data.confirmed_count } : { ok: false, code }
+  }
+  return { ok: false, code: "unknown" }
+}
+
+/** `admin_cancel_session` jsonb → CancelSessionResult. */
+export function mapCancelSessionRpc(data: unknown): CancelSessionResult {
+  if (!isObject(data)) return { ok: false, code: "unknown" }
+  if (
+    data.ok === true &&
+    typeof data.session_id === "string" &&
+    isCount(data.cancelled_bookings) &&
+    isCount(data.refunded) &&
+    isStringArray(data.refunds_skipped)
+  ) {
+    return {
+      ok: true,
+      sessionId: data.session_id,
+      cancelledBookings: data.cancelled_bookings,
+      refunded: data.refunded,
+      refundsSkipped: data.refunds_skipped,
+      replayed: data.replayed === true,
+    }
+  }
+  if (data.ok === false && data.code === "not_found") return { ok: false, code: "not_found" }
   return { ok: false, code: "unknown" }
 }

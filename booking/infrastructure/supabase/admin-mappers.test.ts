@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest"
-import { mapAttendanceRpc, toAdminSessionView, toRosterEntry, toStaffRole, type AdminSessionRow, type RosterRow } from "./admin-mappers"
+import {
+  mapAttendanceRpc,
+  mapCancelSessionRpc,
+  mapCreateSessionsRpc,
+  mapSaveClassTypeRpc,
+  mapUpdateSessionRpc,
+  toAdminClassTypeView,
+  toAdminSessionView,
+  toRosterEntry,
+  toStaffRole,
+  type AdminSessionRow,
+  type RosterRow,
+} from "./admin-mappers"
 
 const BOOKING = "0b5e0000-0000-4000-8000-000000000001"
 
@@ -96,4 +108,91 @@ describe("mapAttendanceRpc (mark_attendance jsonb)", () => {
       expect(mapAttendanceRpc(data)).toEqual({ ok: false, code: "unknown" })
     },
   )
+})
+
+describe("Phase 4.2 admin mappers", () => {
+  const SESSION = "5e550000-0000-4000-8000-000000000002"
+
+  it("toAdminClassTypeView keeps admin-only columns", () => {
+    expect(
+      toAdminClassTypeView({
+        id: "c1",
+        name: "Hatha <b>",
+        description: null,
+        default_duration_minutes: 60,
+        default_capacity: 8,
+        default_modality: "online",
+        is_published: false,
+        sort_order: 3,
+      }),
+    ).toEqual({
+      id: "c1",
+      name: "Hatha <b>",
+      description: null,
+      durationMinutes: 60,
+      defaultCapacity: 8,
+      defaultModality: "online",
+      isPublished: false,
+      sortOrder: 3,
+    })
+  })
+
+  it("mapSaveClassTypeRpc", () => {
+    expect(mapSaveClassTypeRpc({ ok: true, class_type_id: "c1", created: true, is_published: false, upcoming_sessions: 2 })).toEqual({
+      ok: true,
+      classTypeId: "c1",
+      created: true,
+      isPublished: false,
+      upcomingSessions: 2,
+    })
+    expect(mapSaveClassTypeRpc({ ok: true, class_type_id: "c1" })).toEqual({ ok: false, code: "unknown" })
+    expect(mapSaveClassTypeRpc(null)).toEqual({ ok: false, code: "unknown" })
+  })
+
+  it("mapCreateSessionsRpc", () => {
+    expect(mapCreateSessionsRpc({ ok: true, code: null, session_ids: ["a", "b"], replayed: true })).toEqual({
+      ok: true,
+      sessionIds: ["a", "b"],
+      replayed: true,
+    })
+    expect(mapCreateSessionsRpc({ ok: false, code: "not_found" })).toEqual({ ok: false, code: "not_found" })
+    expect(mapCreateSessionsRpc({ ok: true, session_ids: [] })).toEqual({ ok: false, code: "unknown" })
+    expect(mapCreateSessionsRpc({ ok: false, code: "surprise" })).toEqual({ ok: false, code: "unknown" })
+  })
+
+  it("mapUpdateSessionRpc maps every business code and keeps the confirmed count", () => {
+    expect(mapUpdateSessionRpc({ ok: true, session_id: SESSION, capacity: 5, confirmed_count: 2, changed: true })).toEqual({
+      ok: true,
+      sessionId: SESSION,
+      capacity: 5,
+      confirmedCount: 2,
+      changed: true,
+    })
+    expect(mapUpdateSessionRpc({ ok: false, code: "capacity_below_bookings", confirmed_count: 4 })).toEqual({
+      ok: false,
+      code: "capacity_below_bookings",
+      confirmedCount: 4,
+    })
+    for (const code of ["session_cancelled", "session_started", "not_found"]) {
+      expect(mapUpdateSessionRpc({ ok: false, code })).toEqual({ ok: false, code })
+    }
+    expect(mapUpdateSessionRpc({ ok: false, code: "session_full" })).toEqual({ ok: false, code: "unknown" })
+    expect(mapUpdateSessionRpc({ ok: true, session_id: SESSION, capacity: -1, confirmed_count: 0 })).toEqual({ ok: false, code: "unknown" })
+  })
+
+  it("mapCancelSessionRpc", () => {
+    expect(
+      mapCancelSessionRpc({
+        ok: true,
+        code: null,
+        session_id: SESSION,
+        replayed: false,
+        cancelled_bookings: 3,
+        refunded: 2,
+        refunds_skipped: [BOOKING],
+      }),
+    ).toEqual({ ok: true, sessionId: SESSION, cancelledBookings: 3, refunded: 2, refundsSkipped: [BOOKING], replayed: false })
+    expect(mapCancelSessionRpc({ ok: false, code: "not_found" })).toEqual({ ok: false, code: "not_found" })
+    expect(mapCancelSessionRpc({ ok: true, session_id: SESSION })).toEqual({ ok: false, code: "unknown" })
+  })
 })

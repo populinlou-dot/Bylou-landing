@@ -9,6 +9,7 @@ import type {
   CancellationCode,
   ClassType,
   IsoDateTime,
+  Modality,
   Session,
   StudioRules,
 } from "../domain"
@@ -206,6 +207,97 @@ export type MarkAttendanceResult =
   | { ok: true; bookingId: string; attendance: AttendanceMark }
   | { ok: false; code: AttendanceCode }
 
+/* ---------- Admin (Phase 4.2, AD-02 … AD-05) ---------- */
+
+/** A class type as staff see it: drafts and archived ones included. Text is user-provided: plain text only. */
+export interface AdminClassTypeView {
+  id: string
+  name: string
+  description: string | null
+  durationMinutes: number
+  defaultCapacity: number
+  defaultModality: Modality
+  /** False = archived (or draft): hidden from students and unbookable; its history is kept. */
+  isPublished: boolean
+  sortOrder: number
+}
+
+export interface SaveClassTypeCommand {
+  /** Generated once per form (new) or the existing id (edit); a retry updates instead of duplicating. */
+  id: string
+  name: string
+  description: string | null
+  durationMinutes: number
+  defaultCapacity: number
+  defaultModality: Modality
+  isPublished: boolean
+}
+
+/** `admin_upsert_class_type` has no business refusals: bad input is `invalid_input` (SQLSTATE 22023). */
+export type SaveClassTypeResult =
+  | { ok: true; classTypeId: string; created: boolean; isPublished: boolean; upcomingSessions: number }
+  | { ok: false; code: TransportCode }
+
+/** One `create_session` call: N weekly occurrences built in the studio's wall time, all or nothing. */
+export interface CreateSessionsCommand {
+  /** Generated once per form and reused on retries: the server replays instead of duplicating. */
+  requestKey: string
+  classTypeId: string
+  /** Studio-local "YYYY-MM-DD" and "HH:mm" of the first occurrence. */
+  localDate: string
+  localStart: string
+  durationMinutes: number
+  capacity: number
+  modality: Modality
+  /** Public label (e.g. a neighborhood). */
+  locationLabel: string | null
+  /** Attendee-only (private details). */
+  address: string | null
+  meetingUrl: string | null
+  instructorName: string | null
+  /** 1 = single session; up to MAX_REPEAT_WEEKS. */
+  repeatWeeks: number
+}
+
+export type CreateSessionsCode = "not_found" | TransportCode
+
+export type CreateSessionsResult =
+  | { ok: true; sessionIds: string[]; replayed: boolean }
+  | { ok: false; code: CreateSessionsCode }
+
+export interface UpdateSessionCapacityCommand {
+  sessionId: string
+  capacity: number
+}
+
+/** Business refusals of `admin_update_session` (application/RPC codes, ARCHITECTURE §5). */
+export const UPDATE_SESSION_CODES = ["capacity_below_bookings", "session_cancelled", "session_started", "not_found"] as const
+export type UpdateSessionCode = (typeof UPDATE_SESSION_CODES)[number] | TransportCode
+
+export type UpdateSessionResult =
+  | { ok: true; sessionId: string; capacity: number; confirmedCount: number; changed: boolean }
+  | { ok: false; code: UpdateSessionCode; confirmedCount?: number }
+
+export interface CancelSessionCommand {
+  sessionId: string
+}
+
+export type CancelSessionCode = "not_found" | TransportCode
+
+export type CancelSessionResult =
+  | {
+      ok: true
+      sessionId: string
+      /** Confirmed bookings cancelled by this call (0 on a replay). */
+      cancelledBookings: number
+      /** Bookings whose credit went back to the pack. */
+      refunded: number
+      /** Bookings whose pack had already expired: staff grants those credits by hand. */
+      refundsSkipped: string[]
+      replayed: boolean
+    }
+  | { ok: false; code: CancelSessionCode }
+
 /**
  * Staff read/write side. Reads throw RepositoryError (`unauthenticated`, `forbidden`, …);
  * writes return business refusals as data. The database is the only authority (ADR-005).
@@ -219,4 +311,11 @@ export interface AdminRepository {
   /** Every booking of the session (any status), oldest first. */
   getRoster(sessionId: string): Promise<RosterEntry[]>
   markAttendance(cmd: MarkAttendanceCommand): Promise<MarkAttendanceResult>
+  /** Every class type (published, draft, archived), by sort order then name. */
+  listClassTypes(): Promise<AdminClassTypeView[]>
+  saveClassType(cmd: SaveClassTypeCommand): Promise<SaveClassTypeResult>
+  createSessions(cmd: CreateSessionsCommand): Promise<CreateSessionsResult>
+  updateSessionCapacity(cmd: UpdateSessionCapacityCommand): Promise<UpdateSessionResult>
+  /** Cancels the session and every confirmed booking with a refund, regardless of the window. */
+  cancelSession(cmd: CancelSessionCommand): Promise<CancelSessionResult>
 }

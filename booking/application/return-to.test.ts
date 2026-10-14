@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { adminDayHref, adminSessionHref, sanitizeReturnTo, sessionHref, signInHref } from "./return-to"
+import { adminDayHref, adminNewSessionHref, adminSessionHref, sanitizeReturnTo, sessionHref, signInHref } from "./return-to"
 
 describe("sanitizeReturnTo (open-redirect guard)", () => {
   it.each([
@@ -44,6 +44,9 @@ describe("sanitizeReturnTo (open-redirect guard)", () => {
     expect(adminDayHref()).toBe("/admin/")
     expect(adminDayHref("2026-10-15")).toBe("/admin/?dia=2026-10-15")
     expect(adminSessionHref("a b&c")).toBe("/admin/clase/?id=a+b%26c")
+    expect(adminNewSessionHref("2026-10-15")).toBe("/admin/nueva-clase/?dia=2026-10-15")
+    expect(adminNewSessionHref(null)).toBe("/admin/nueva-clase/")
+    expect(sanitizeReturnTo("/admin/nueva-clase/?dia=2026-10-15")).toBe("/admin/nueva-clase/?dia=2026-10-15")
     expect(signInHref("/admin/")).toBe(`/reservas/ingresar/?returnTo=${encodeURIComponent("/admin/")}`)
   })
 

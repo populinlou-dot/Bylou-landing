@@ -29,7 +29,8 @@ select is(
   (select array_agg(n.nspname || '.' || p.proname order by n.nspname || '.' || p.proname)
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname in ('public', 'private') and has_function_privilege('authenticated', p.oid, 'execute')),
-  array['private.class_type_is_published', 'private.is_staff', 'public.admin_cancel_session', 'public.book_session', 'public.cancel_booking',
+  array['private.class_type_is_published', 'private.is_staff', 'public.admin_cancel_session', 'public.admin_update_session',
+        'public.admin_upsert_class_type', 'public.book_session', 'public.cancel_booking',
         'public.create_session', 'public.grant_credits', 'public.mark_attendance'],
   'E11 authenticated EXECUTE allow-list');
 

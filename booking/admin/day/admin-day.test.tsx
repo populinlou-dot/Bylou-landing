@@ -57,6 +57,18 @@ describe("Admin 'Hoy' (AD-06)", () => {
     expect(screen.getByRole("link", { name: "Volver a hoy" }).getAttribute("href")).toMatch(/^\/admin\/?$/)
   })
 
+  it("links '+ Nueva clase' to the form for this day; past days open it on today", async () => {
+    renderAdmin(<AdminDayContainer date="2026-10-15" />, { brand: bylouBrand, ...staff() })
+    expect((await screen.findByRole("link", { name: "Nueva clase" })).getAttribute("href")).toMatch(
+      /^\/admin\/nueva-clase\/?\?dia=2026-10-15$/,
+    )
+    cleanup()
+    renderAdmin(<AdminDayContainer date="2026-10-01" />, { brand: bylouBrand, ...staff() })
+    // Empty past day: the link appears in the header and in the empty state.
+    const links = await screen.findAllByRole("link", { name: "Nueva clase" })
+    expect(links.every((l) => /^\/admin\/nueva-clase\/?$/.test(l.getAttribute("href") ?? ""))).toBe(true)
+  })
+
   it("shows the empty state for a day without sessions", async () => {
     renderAdmin(<AdminDayContainer date="2026-10-18" />, { brand: bylouBrand, ...staff() })
     expect(await screen.findByText("No hay clases este día.")).toBeTruthy()

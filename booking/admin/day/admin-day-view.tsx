@@ -1,9 +1,9 @@
 "use client"
 
-import { AlertCircle, CalendarX2, ChevronLeft, ChevronRight, RotateCw, Users } from "lucide-react"
+import { AlertCircle, CalendarX2, ChevronLeft, ChevronRight, Plus, RotateCw, Users } from "lucide-react"
 import Link from "next/link"
 import { useId } from "react"
-import { adminDayHref, adminSessionHref, type AdminDay, type AdminDayEntry } from "../../application"
+import { adminDayHref, adminNewSessionHref, adminSessionHref, type AdminDay, type AdminDayEntry } from "../../application"
 import { useBooking, useCopy } from "../../ui/booking-context"
 import { cx, formatDayHeading, formatTime } from "../../ui/format"
 import { Badge, SkeletonBlock, StatusPanel, buttonClass } from "../../ui/primitives"
@@ -58,6 +58,14 @@ function AdminDayContent({ day }: { day: AdminDay }) {
   const { brand } = useBooking()
   const t = useCopy()
   const heading = formatDayHeading(day.date, brand.locale)
+  // Past days have nothing to publish: the form opens on today instead.
+  const newSessionHref = adminNewSessionHref(day.date >= day.today ? day.date : null)
+  const newSessionLink = (
+    <Link href={newSessionHref} className={buttonClass.primary}>
+      <Plus aria-hidden="true" className="size-4" />
+      {t("admin.day.newSession")}
+    </Link>
+  )
 
   return (
     <section className="flex flex-col gap-5" aria-labelledby="admin-day-title">
@@ -80,10 +88,11 @@ function AdminDayContent({ day }: { day: AdminDay }) {
             <ChevronRight aria-hidden="true" className="size-5" />
           </Link>
         </nav>
+        <div>{newSessionLink}</div>
       </header>
 
       {day.sessions.length === 0 ? (
-        <StatusPanel role="status" icon={<CalendarX2 className="size-5" />} title={t("admin.day.empty")} />
+        <StatusPanel role="status" icon={<CalendarX2 className="size-5" />} title={t("admin.day.empty")} action={newSessionLink} />
       ) : (
         <ul role="list" className="flex flex-col gap-3">
           {day.sessions.map((entry) => (

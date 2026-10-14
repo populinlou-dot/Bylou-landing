@@ -184,3 +184,43 @@ describe.sequential("journey D — cancel vs book", () => {
     }
   })
 })
+
+describe.sequential("journey AD-05.1 — capacity edit vs book", () => {
+  it(`3 bookings race a capacity decrease to 2 → never more confirmed than capacity (×${ITERATIONS})`, async () => {
+    const [filler, ...bookers] = await actorsFor(4)
+    const staff = await Actor.connect(await admin.staffId())
+    actors.push(staff)
+    const outcomes = { reduced: 0, refused: 0 }
+    for (let i = 0; i < ITERATIONS; i++) {
+      const session = await admin.session(4)
+      expect((await filler.book(session)).ok).toBe(true)
+
+      const racers = [staff, ...bookers]
+      const results = await admin.race(LOCK_SESSION, [session], racers, (a) =>
+        a === staff ? a.updateCapacity(session, 2) : a.book(session),
+      )
+      const [update, ...books] = results
+      const booked = count(books, "ok")
+      const row = await admin.one<{ capacity: number; confirmed_count: number }>(
+        "select capacity, confirmed_count from public.sessions where id = $1",
+        [session],
+      )
+
+      expect(row.confirmed_count).toBe(1 + booked)
+      expect(row.confirmed_count).toBeLessThanOrEqual(row.capacity)
+      if (update.ok) {
+        outcomes.reduced++
+        expect(row.capacity).toBe(2)
+        expect(booked).toBeLessThanOrEqual(1)
+      } else {
+        outcomes.refused++
+        expect(update.code).toBe("capacity_below_bookings")
+        expect(row.capacity).toBe(4)
+        expect(booked).toBeGreaterThanOrEqual(2)
+      }
+      expect(codes(books).every((c) => c === "ok" || c === "session_full")).toBe(true)
+      expect(await admin.invariantViolations([session], [filler, ...bookers].map((a) => a.userId))).toEqual([])
+    }
+    expect(outcomes.reduced + outcomes.refused).toBe(ITERATIONS)
+  })
+})

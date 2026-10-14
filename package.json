@@ -7,7 +7,12 @@
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:db": "vitest run --mode db",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "1.2.2",
@@ -30,9 +35,11 @@
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/node": "^22",
+    "@types/pg": "8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "jsdom": "29.1.1",
+    "pg": "8.23.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",

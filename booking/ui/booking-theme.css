@@ -1,0 +1,52 @@
+/*
+ * Booking theme scope (ADR-008). Everything is scoped to [data-booking-theme]:
+ * the landing (:root, body, app/page.tsx styles) is untouched.
+ * Colors/radii/fonts come from CSS variables set by themeToCssVars() on the wrapper.
+ */
+
+[data-booking-theme] {
+  min-height: 100dvh;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Same focus treatment as the landing (UX_DESIGN §5.2), driven by the theme ring color. */
+[data-booking-theme] :focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
+[data-booking-theme] .booking-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 50;
+  padding: 12px 20px;
+  border-radius: var(--radius-button);
+  background: var(--inverse);
+  color: var(--inverse-foreground);
+  font-weight: 600;
+}
+
+[data-booking-theme] .booking-skip-link:focus {
+  left: 16px;
+}
+
+[data-booking-theme] .booking-skip-link:focus-visible {
+  outline-color: var(--inverse-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-booking-theme] *,
+  [data-booking-theme] *::before,
+  [data-booking-theme] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

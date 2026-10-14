@@ -14,6 +14,13 @@ export const bylouBrand: BrandConfig = {
   theme: bylouTheme,
   terminology: bylouTerminology,
   copy: bylouCopy,
-  rules: { ...DEFAULT_STUDIO_RULES, bookingWindow: { ...DEFAULT_STUDIO_RULES.bookingWindow } },
+  rules: {
+    ...DEFAULT_STUDIO_RULES,
+    bookingWindow: { ...DEFAULT_STUDIO_RULES.bookingWindow },
+    // Owner decision 2026-10-13: free cancellation up to 24 h before start; after that the app
+    // blocks cancellation and the student must contact the studio directly.
+    cancellationWindowHours: 24,
+    lateCancelPolicy: "deny",
+  },
   features: { ...DEFAULT_FEATURE_FLAGS },
 }

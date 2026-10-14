@@ -4,11 +4,25 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 /**
- * ADR-007: booking/domain is pure TS and imports nothing outside itself
- * (no react, next, @supabase, brands, booking/ui...). Test files may also import "vitest".
+ * ADR-007 / ARCHITECTURE §2 import boundaries, enforced by scanning import specifiers
+ * (ESLint is broken in this repo, ADR-012).
+ *
+ * - booking/domain: pure TS, imports nothing outside itself.
+ * - booking/application: imports only booking/domain and its own files.
+ * - booking/ui: never imports brands/*, booking/infrastructure or @supabase/*. The brand and
+ *   adapters arrive through props/context from the composition root (app/reservas/**).
+ *   UI test files may import a brand as a fixture.
+ * Test files (*.test.ts[x]) may also import the test runner / testing library.
  */
-const DOMAIN_DIR = fileURLToPath(new URL("./domain", import.meta.url))
-const TEST_ONLY_ALLOWED = new Set(["vitest"])
+const BOOKING_DIR = fileURLToPath(new URL(".", import.meta.url))
+const ROOT_DIR = resolve(BOOKING_DIR, "..")
+const DOMAIN_DIR = join(BOOKING_DIR, "domain")
+const APPLICATION_DIR = join(BOOKING_DIR, "application")
+const UI_DIR = join(BOOKING_DIR, "ui")
+const BRANDS_DIR = join(ROOT_DIR, "brands")
+const INFRASTRUCTURE_DIR = join(BOOKING_DIR, "infrastructure")
+
+const TEST_ONLY_PACKAGES = ["vitest", "@testing-library/"]
 
 const IMPORT_PATTERNS = [
   /\b(?:import|export)\s[^'"`;]*?\bfrom\s*["']([^"']+)["']/g, // import x from "y" / export { x } from "y"
@@ -21,11 +35,42 @@ function importSpecifiers(source: string): string[] {
   return IMPORT_PATTERNS.flatMap((pattern) => Array.from(source.matchAll(pattern), (m) => m[1]))
 }
 
-function isInsideDomain(fromFile: string, specifier: string): boolean {
-  if (!specifier.startsWith("./") && !specifier.startsWith("../")) return false
-  const target = resolve(dirname(fromFile), specifier)
-  return target === DOMAIN_DIR || target.startsWith(DOMAIN_DIR + sep)
+/** Absolute path for relative and "@/" specifiers; null for packages. */
+function resolveSpecifier(fromFile: string, specifier: string): string | null {
+  if (specifier.startsWith("./") || specifier.startsWith("../")) return resolve(dirname(fromFile), specifier)
+  if (specifier.startsWith("@/")) return resolve(ROOT_DIR, specifier.slice(2))
+  return null
 }
+
+const isInside = (target: string | null, dir: string) => target !== null && (target === dir || target.startsWith(dir + sep))
+const isTestFile = (file: string) => /\.test\.tsx?$/.test(file)
+const isTestPackage = (specifier: string) => TEST_ONLY_PACKAGES.some((p) => specifier === p || specifier.startsWith(p))
+
+type Rule = (file: string, specifier: string) => boolean // true = allowed
+
+/** Allow-list: only the given directories (plus test packages in tests). */
+const onlyInside =
+  (...dirs: string[]): Rule =>
+  (file, specifier) => {
+    if (isTestFile(file) && isTestPackage(specifier)) return true
+    const target = resolveSpecifier(file, specifier)
+    return dirs.some((dir) => isInside(target, dir))
+  }
+
+/** Deny-list for the UI layer. */
+const uiRule: Rule = (file, specifier) => {
+  const target = resolveSpecifier(file, specifier)
+  if (specifier.startsWith("@supabase/")) return false
+  if (isInside(target, INFRASTRUCTURE_DIR)) return false
+  if (isInside(target, BRANDS_DIR)) return isTestFile(file)
+  return true
+}
+
+const LAYERS = [
+  { name: "booking/domain", dir: DOMAIN_DIR, rule: onlyInside(DOMAIN_DIR), minFiles: 6 },
+  { name: "booking/application", dir: APPLICATION_DIR, rule: onlyInside(DOMAIN_DIR, APPLICATION_DIR), minFiles: 3 },
+  { name: "booking/ui", dir: UI_DIR, rule: uiRule, minFiles: 5 },
+]
 
 function listTsFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -35,24 +80,28 @@ function listTsFiles(dir: string): string[] {
   })
 }
 
-function violations(file: string, source: string): string[] {
-  const isTest = /\.test\.tsx?$/.test(file)
+function violations(rule: Rule, baseDir: string, file: string, source: string): string[] {
   return importSpecifiers(source)
-    .filter((spec) => !isInsideDomain(file, spec) && !(isTest && TEST_ONLY_ALLOWED.has(spec)))
-    .map((spec) => `${relative(DOMAIN_DIR, file)} -> ${spec}`)
+    .filter((spec) => !rule(file, spec))
+    .map((spec) => `${relative(baseDir, file)} -> ${spec}`)
 }
 
-describe("booking/domain boundary", () => {
+describe.each(LAYERS)("$name boundary", ({ dir, rule, minFiles }) => {
   it("has source files to scan", () => {
-    expect(listTsFiles(DOMAIN_DIR).length).toBeGreaterThan(5)
+    expect(listTsFiles(dir).length).toBeGreaterThanOrEqual(minFiles)
   })
 
-  it("imports nothing outside booking/domain", () => {
-    const found = listTsFiles(DOMAIN_DIR).flatMap((file) => violations(file, readFileSync(file, "utf8")))
+  it("respects its import rule", () => {
+    const found = listTsFiles(dir).flatMap((file) => violations(rule, dir, file, readFileSync(file, "utf8")))
     expect(found).toEqual([])
   })
+})
 
-  it("detects forbidden imports (scanner self-check)", () => {
+describe("boundary scanner self-checks", () => {
+  const domainRule = LAYERS[0].rule
+  const applicationRule = LAYERS[1].rule
+
+  it("detects forbidden domain imports", () => {
     const file = join(DOMAIN_DIR, "fake.ts")
     const source = [
       'import { useState } from "react"',
@@ -64,7 +113,7 @@ describe("booking/domain boundary", () => {
       'import { ok } from "./types"',
       'import { ok2 } from "../domain/codes"',
     ].join("\n")
-    expect(violations(file, source)).toEqual([
+    expect(violations(domainRule, DOMAIN_DIR, file, source)).toEqual([
       "fake.ts -> react",
       "fake.ts -> ../theme/types",
       "fake.ts -> @supabase/supabase-js",
@@ -75,7 +124,50 @@ describe("booking/domain boundary", () => {
   })
 
   it("rejects vitest outside test files", () => {
-    expect(violations(join(DOMAIN_DIR, "policy.ts"), 'import { it } from "vitest"')).toEqual(["policy.ts -> vitest"])
-    expect(violations(join(DOMAIN_DIR, "policy.test.ts"), 'import { it } from "vitest"')).toEqual([])
+    expect(violations(domainRule, DOMAIN_DIR, join(DOMAIN_DIR, "policy.ts"), 'import { it } from "vitest"')).toEqual([
+      "policy.ts -> vitest",
+    ])
+    expect(violations(domainRule, DOMAIN_DIR, join(DOMAIN_DIR, "policy.test.ts"), 'import { it } from "vitest"')).toEqual([])
+  })
+
+  it("lets application import only domain and itself", () => {
+    const file = join(APPLICATION_DIR, "fake.ts")
+    const source = [
+      'import { evaluateBooking } from "../domain"',
+      'import type { Clock } from "./ports"',
+      'import { DEFAULT_STUDIO_RULES } from "../config"',
+      'import { MockBookingRepository } from "../infrastructure/mock"',
+      'import { bylouBrand } from "@/brands/bylou"',
+      'import { useState } from "react"',
+    ].join("\n")
+    expect(violations(applicationRule, APPLICATION_DIR, file, source)).toEqual([
+      "fake.ts -> ../config",
+      "fake.ts -> ../infrastructure/mock",
+      "fake.ts -> @/brands/bylou",
+      "fake.ts -> react",
+    ])
+  })
+
+  it("keeps brands, infrastructure and supabase out of the UI (brands allowed only as test fixtures)", () => {
+    const source = [
+      'import { useState } from "react"',
+      'import Link from "next/link"',
+      'import { getAgenda } from "../application"',
+      'import { themeToCssVars } from "../theme"',
+      'import { bylouBrand } from "../../brands/bylou"',
+      'import { resolveBrand } from "@/brands"',
+      'import { createBookingRuntime } from "../infrastructure/data-source"',
+      'import { createClient } from "@supabase/supabase-js"',
+    ].join("\n")
+    expect(violations(uiRule, UI_DIR, join(UI_DIR, "fake.tsx"), source)).toEqual([
+      "fake.tsx -> ../../brands/bylou",
+      "fake.tsx -> @/brands",
+      "fake.tsx -> ../infrastructure/data-source",
+      "fake.tsx -> @supabase/supabase-js",
+    ])
+    expect(violations(uiRule, UI_DIR, join(UI_DIR, "fake.test.tsx"), source)).toEqual([
+      "fake.test.tsx -> ../infrastructure/data-source",
+      "fake.test.tsx -> @supabase/supabase-js",
+    ])
   })
 })

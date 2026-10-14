@@ -66,16 +66,21 @@ function runJourney(rules: StudioRules) {
 }
 
 describe("Journey G — white-label decoupling", () => {
-  it("both brands use rules-equal configs", () => {
-    expect(demoStudioBrand.rules).toEqual(bylouBrand.rules)
+  it("swapping theme/copy/terminology onto the same rules keeps the config valid", () => {
+    const reskinned = { ...demoStudioBrand, rules: bylouBrand.rules }
+    expect(validateBrandConfig(reskinned)).toEqual([])
   })
 
-  it("same inputs under bylou and demo-studio yield identical domain results", () => {
+  it("same rules under bylou and demo-studio presentation yield identical domain results", () => {
+    // Domain outcomes are a function of rules only; the brand's look and language must not matter.
     const bylou = runJourney(bylouBrand.rules)
-    const demo = runJourney(demoStudioBrand.rules)
-    expect(demo).toEqual(bylou)
-    // Sanity: the journey exercises distinct outcomes, not a trivial all-ok run.
-    expect(bylou.bookings.map((r) => (r.ok ? "ok" : r.code))).toEqual([
+    const reskinned = runJourney({ ...demoStudioBrand, rules: bylouBrand.rules }.rules)
+    expect(reskinned).toEqual(bylou)
+  })
+
+  it("the shared journey exercises distinct outcomes, not a trivial all-ok run", () => {
+    const fixture = runJourney(RULES)
+    expect(fixture.bookings.map((r) => (r.ok ? "ok" : r.code))).toEqual([
       "ok",
       "ok",
       "session_full",
@@ -85,7 +90,13 @@ describe("Journey G — white-label decoupling", () => {
       "session_started",
       "session_cancelled",
     ])
-    expect(bylou.cancellations.map((r) => r.outcome)).toEqual(["refund", "refund", "late", "late", "denied"])
+    expect(fixture.cancellations.map((r) => r.outcome)).toEqual(["refund", "refund", "late", "late", "denied"])
+  })
+
+  it("bylou blocks late cancellation (owner decision: 24 h, then contact the studio)", () => {
+    const outcomes = runJourney(bylouBrand.rules).cancellations
+    expect(outcomes[1]).toEqual({ outcome: "refund" })
+    expect(outcomes[2]).toEqual({ outcome: "denied", code: "cancellation_too_late" })
   })
 
   it("rules, not brand, drive outcomes: changing a rule changes the result", () => {

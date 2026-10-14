@@ -24,12 +24,12 @@ select is(
     where n.nspname in ('public', 'private') and has_function_privilege('anon', p.oid, 'execute')),
   null, 'E11 anon has EXECUTE on no function');
 
--- authenticated may execute exactly the RPC allow-list + the RLS helper.
+-- authenticated may execute exactly the RPC allow-list + the RLS helpers.
 select is(
   (select array_agg(n.nspname || '.' || p.proname order by n.nspname || '.' || p.proname)
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname in ('public', 'private') and has_function_privilege('authenticated', p.oid, 'execute')),
-  array['private.is_staff', 'public.admin_cancel_session', 'public.book_session', 'public.cancel_booking',
+  array['private.class_type_is_published', 'private.is_staff', 'public.admin_cancel_session', 'public.book_session', 'public.cancel_booking',
         'public.create_session', 'public.grant_credits', 'public.mark_attendance'],
   'E11 authenticated EXECUTE allow-list');
 
@@ -45,7 +45,7 @@ select is(
 
 select is(
   (select array_agg(c.relname::text order by c.relname::text) from pg_class c join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind in ('r', 'v') and has_table_privilege('anon', c.oid, 'SELECT')),
+    where n.nspname = 'public' and c.relkind in ('r', 'v') and has_any_column_privilege('anon', c.oid, 'SELECT')),
   array['class_types', 'session_availability', 'sessions', 'studio_settings'],
   'E1 anon can SELECT only the public catalog');
 

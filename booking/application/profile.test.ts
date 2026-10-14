@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { RepositoryError } from "./ports"
-import { DISPLAY_NAME_MAX, needsDisplayName, saveDisplayName, validateDisplayName } from "./profile"
+import { DISPLAY_NAME_MAX, hasVisibleName, needsDisplayName, saveDisplayName, validateDisplayName } from "./profile"
 import { fakeRepository } from "./test-support"
 
 describe("validateDisplayName", () => {
@@ -62,3 +62,28 @@ describe("saveDisplayName", () => {
     expect(await saveDisplayName({ repository }, "Ana")).toEqual({ ok: false, code: "unknown" })
   })
 })
+
+describe("visible name rule (same character set as private.has_display_name, ADR-022)", () => {
+  it.each([
+    ["tab", "\t"],
+    ["no-break space", "\u00A0"],
+    ["zero-width space + joiner", "\u200B\u200D"],
+    ["word joiner + BOM", "\u2060\uFEFF"],
+    ["Hangul filler", "\u3164"],
+    ["halfwidth Hangul filler", "\uFFA0"],
+    ["ideographic space", "\u3000"],
+  ])("a name made only of %s is no name", (_, value) => {
+    expect(hasVisibleName(value)).toBe(false)
+    expect(validateDisplayName(value)).toEqual({ ok: false, code: "empty" })
+  })
+
+  it("a real name with invisible padding still counts", () => {
+    expect(hasVisibleName("Ana\u00A0")).toBe(true)
+    expect(hasVisibleName(null)).toBe(false)
+  })
+
+  it("needsDisplayName asks again when the stored name is invisible", async () => {
+    expect(await needsDisplayName({ repository: fakeRepository([], { displayName: "\u3164" }) })).toBe(true)
+  })
+})
+

@@ -1,10 +1,18 @@
 "use client"
 
-import { AlertCircle, ArrowLeft, Ban, CalendarSearch, RotateCw, Users } from "lucide-react"
+import { AlertCircle, ArrowLeft, Ban, CalendarSearch, Hourglass, RotateCw, Users } from "lucide-react"
 import Link from "next/link"
-import { adminDayHref, canEditCapacity, type AdminSessionDetail, type AttendanceMark, type RosterEntry } from "../../application"
+import {
+  adminDayHref,
+  canEditCapacity,
+  rosterLabel,
+  type AdminSessionDetail,
+  type AdminWaitlistEntry,
+  type AttendanceMark,
+  type RosterEntry,
+} from "../../application"
 import { ATTENDANCE_EDITABLE_DAYS, ATTENDANCE_OPENS_MINUTES_BEFORE } from "../../domain"
-import { useBooking, useCopy } from "../../ui/booking-context"
+import { useBooking, useCopy, type Translate } from "../../ui/booking-context"
 import { formatDayHeading, formatTime } from "../../ui/format"
 import { Badge, SkeletonBlock, StatusPanel, buttonClass } from "../../ui/primitives"
 import { ModalityIcon, useModalityLabel } from "../../ui/session-meta"
@@ -166,6 +174,12 @@ function AdminSessionContent({
             <Users aria-hidden="true" className="size-4 text-primary" />
             <Occupancy confirmed={entry.confirmedCount} capacity={session.capacity} />
           </span>
+          {brand.features.waitlist && detail.waitingCount > 0 ? (
+            <span className="flex items-center gap-1.5 font-semibold text-foreground">
+              <Hourglass aria-hidden="true" className="size-4 text-primary" />
+              {waitingCountLabel(detail.waitingCount, t)}
+            </span>
+          ) : null}
         </p>
       </header>
 
@@ -187,7 +201,63 @@ function AdminSessionContent({
           <RosterList roster={roster} window={entry.attendanceWindow} rows={rows} onMark={onMark} />
         )}
       </section>
+
+      {brand.features.waitlist ? <WaitlistSection detail={detail} /> : null}
     </article>
+  )
+}
+
+function waitingCountLabel(n: number, t: Translate): string {
+  return n === 1 ? t("admin.waitlist.count.one") : t("admin.waitlist.count.many", { n })
+}
+
+function waitlistStatusLabel(entry: AdminWaitlistEntry, t: Translate): string {
+  switch (entry.status) {
+    case "waiting":
+      return t("admin.waitlist.position", { n: entry.position ?? 0 })
+    case "promoted":
+      return t("admin.waitlist.promoted")
+    case "skipped":
+      return t(`admin.waitlist.skipped.${entry.skipReason ?? "no_valid_credit"}`)
+    case "left":
+      return t("admin.waitlist.left")
+    case "closed":
+      return t("admin.waitlist.closed")
+  }
+}
+
+/** Phase 4.4 (AD-06): waiting students in promotion order, then what happened to the others. Read-only. */
+function WaitlistSection({ detail }: { detail: AdminSessionDetail }) {
+  const t = useCopy()
+  const { waitlist, waitingCount } = detail
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="admin-waitlist-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="admin-waitlist-title" className="text-[17px] font-semibold text-foreground">
+          {t("admin.waitlist.title")}
+        </h2>
+        {waitingCount > 0 ? <p className="text-[14.5px] text-muted-foreground">{waitingCountLabel(waitingCount, t)}</p> : null}
+      </div>
+      {waitlist.length === 0 ? (
+        <p className="rounded-[var(--radius-card)] border border-border bg-card p-4 text-[15px] text-muted-foreground">
+          {t("admin.waitlist.empty")}
+        </p>
+      ) : (
+        <ol className="flex flex-col divide-y divide-border rounded-[var(--radius-card)] border border-border bg-card">
+          {waitlist.map((entry) => (
+            <li key={entry.entryId} className="flex flex-wrap items-center justify-between gap-2 p-4">
+              {/* Plain text only: React escapes it (user-provided name). */}
+              <p className={entry.status === "waiting" ? "text-[15.5px] font-semibold text-foreground" : "text-[15.5px] text-muted-foreground"}>
+                {rosterLabel(entry) ?? t("admin.roster.noName")}
+              </p>
+              <Badge tone={entry.status === "waiting" ? "brand" : entry.status === "promoted" ? "success" : "neutral"}>
+                {waitlistStatusLabel(entry, t)}
+              </Badge>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }
 

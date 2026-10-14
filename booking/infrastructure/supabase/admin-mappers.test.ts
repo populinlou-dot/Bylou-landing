@@ -167,7 +167,12 @@ describe("Phase 4.2 admin mappers", () => {
       capacity: 5,
       confirmedCount: 2,
       changed: true,
+      promoted: 0,
     })
+    // Phase 4.4: new spots that went to the waitlist.
+    expect(
+      mapUpdateSessionRpc({ ok: true, session_id: SESSION, capacity: 5, confirmed_count: 4, changed: true, promoted: 2 }),
+    ).toMatchObject({ confirmedCount: 4, promoted: 2 })
     expect(mapUpdateSessionRpc({ ok: false, code: "capacity_below_bookings", confirmed_count: 4 })).toEqual({
       ok: false,
       code: "capacity_below_bookings",

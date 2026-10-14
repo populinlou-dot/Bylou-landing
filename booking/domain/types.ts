@@ -67,7 +67,17 @@ export interface CreditLedgerEntry {
   createdAt: IsoDateTime
 }
 
-export type WaitlistStatus = "waiting" | "promoted" | "skipped" | "left"
+/**
+ * waiting → promoted (booked from the list) | skipped (passed over: no valid pack / already booked) |
+ * left (she left) | closed (session cancelled, account erased, or she booked the class directly).
+ */
+export type WaitlistStatus = "waiting" | "promoted" | "skipped" | "left" | "closed"
+
+/**
+ * Why a waiting student was passed over when a spot opened (ADR-011 owner rule, ADR-021): no valid pack,
+ * already booked, no display name, over the self-cancellation limit (ADR-019), or the promotion could not be written.
+ */
+export type WaitlistSkipReason = "no_valid_credit" | "already_booked" | "profile_incomplete" | "too_many_changes" | "promotion_failed"
 
 export interface WaitlistEntry {
   id: string

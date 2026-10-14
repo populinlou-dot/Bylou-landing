@@ -65,6 +65,7 @@ const MY_BOOKING: MyBooking = {
   classType: CLASS_TYPES[1],
   instructorName: "Lou",
   refunded: false,
+  source: "student",
   privateDetails: null,
 }
 

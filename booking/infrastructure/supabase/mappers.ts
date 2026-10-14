@@ -10,17 +10,24 @@ import {
   type Booking,
   type Modality,
   type StudioRules,
+  type WaitlistSkipReason,
+  type WaitlistStatus,
 } from "../../domain"
-import { BOOK_RPC_CODES } from "../../application"
+import { BOOK_RPC_CODES, WAITLIST_CODES } from "../../application"
 import type {
   AuthCode,
   BookCode,
   BookResult,
   CancelCode,
   CancelResult,
+  BookingSource,
   ClassTypeView,
   CreditBalance,
+  JoinWaitlistResult,
+  LeaveWaitlistResult,
   MyBooking,
+  MyWaitlistEntry,
+  WaitlistCode,
   SessionAvailability,
   SessionPrivateDetails,
   TransportCode,
@@ -69,6 +76,103 @@ export function mapCancelRpc(data: unknown): CancelResult {
     return { ok: false, code: data.code as CancelCode }
   }
   return { ok: false, code: "unknown" }
+}
+
+const WAITLIST_STATUSES: readonly string[] = ["waiting", "promoted", "skipped", "left", "closed"]
+const WAITLIST_ERROR_CODES: readonly string[] = WAITLIST_CODES
+const isWaitlistStatus = (value: unknown): value is WaitlistStatus =>
+  typeof value === "string" && WAITLIST_STATUSES.includes(value)
+const positionOrNull = (value: unknown): number | null =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null
+
+function waitlistFailure(data: Json): { ok: false; code: WaitlistCode } {
+  if (data.ok === false && typeof data.code === "string" && WAITLIST_ERROR_CODES.includes(data.code)) {
+    return { ok: false, code: data.code as WaitlistCode }
+  }
+  return { ok: false, code: "unknown" }
+}
+
+/** `join_waitlist` jsonb → JoinWaitlistResult (migration 20261014001300). */
+export function mapJoinWaitlistRpc(data: unknown): JoinWaitlistResult {
+  if (!isObject(data)) return { ok: false, code: "unknown" }
+  if (data.ok === true && typeof data.entry_id === "string" && isWaitlistStatus(data.status)) {
+    return {
+      ok: true,
+      entryId: data.entry_id,
+      status: data.status,
+      position: positionOrNull(data.position),
+      replayed: data.replayed === true,
+    }
+  }
+  return waitlistFailure(data)
+}
+
+/** `leave_waitlist` jsonb → LeaveWaitlistResult. */
+export function mapLeaveWaitlistRpc(data: unknown): LeaveWaitlistResult {
+  if (!isObject(data)) return { ok: false, code: "unknown" }
+  if (data.ok === true && isWaitlistStatus(data.status)) {
+    return {
+      ok: true,
+      status: data.status,
+      bookingId: typeof data.booking_id === "string" ? data.booking_id : null,
+      replayed: data.replayed === true,
+    }
+  }
+  return waitlistFailure(data)
+}
+
+const SKIP_REASONS: readonly string[] = ["no_valid_credit", "already_booked", "profile_incomplete", "too_many_changes", "promotion_failed"]
+const MODALITIES: readonly string[] = ["in_person", "online"]
+
+/** One `my_waitlist_entries` item; malformed items are dropped instead of rendering half a card. */
+function toMyWaitlistEntry(item: unknown): MyWaitlistEntry | null {
+  if (!isObject(item) || !isObject(item.session)) return null
+  const session = item.session
+  if (
+    typeof item.entry_id !== "string" ||
+    !isWaitlistStatus(item.status) ||
+    typeof item.created_at !== "string" ||
+    typeof session.id !== "string" ||
+    typeof session.class_type_id !== "string" ||
+    typeof session.class_type_name !== "string" ||
+    typeof session.starts_at !== "string" ||
+    typeof session.ends_at !== "string" ||
+    typeof session.capacity !== "number" ||
+    typeof session.modality !== "string" ||
+    !MODALITIES.includes(session.modality) ||
+    (session.status !== "scheduled" && session.status !== "cancelled")
+  ) {
+    return null
+  }
+  return {
+    entryId: item.entry_id,
+    session: {
+      id: session.id,
+      classTypeId: session.class_type_id,
+      startsAt: iso(session.starts_at),
+      endsAt: iso(session.ends_at),
+      capacity: session.capacity,
+      modality: session.modality as Modality,
+      status: session.status,
+    },
+    classTypeName: session.class_type_name,
+    instructorName: typeof session.instructor_name === "string" ? session.instructor_name : null,
+    status: item.status,
+    skipReason:
+      typeof item.skip_reason === "string" && SKIP_REASONS.includes(item.skip_reason)
+        ? (item.skip_reason as WaitlistSkipReason)
+        : null,
+    position: item.status === "waiting" ? positionOrNull(item.position) : null,
+    bookingId: typeof item.booking_id === "string" ? item.booking_id : null,
+    createdAt: iso(item.created_at),
+    resolvedAt: typeof item.resolved_at === "string" ? iso(item.resolved_at) : null,
+  }
+}
+
+/** `my_waitlist_entries` jsonb → her entries (empty when the studio has the waitlist off). Null = bad shape. */
+export function mapMyWaitlistRpc(data: unknown): MyWaitlistEntry[] | null {
+  if (!isObject(data) || data.ok !== true || !Array.isArray(data.entries)) return null
+  return data.entries.map(toMyWaitlistEntry).filter((e): e is MyWaitlistEntry => e !== null)
 }
 
 export interface PostgrestErrorLike {
@@ -169,6 +273,7 @@ export interface MyBookingRow {
   credit_grant_id: string | null
   created_at: string
   refunded: boolean
+  source: BookingSource
   session: {
     id: string
     class_type_id: string
@@ -253,7 +358,6 @@ export function toSessionAvailability(
     instructorName: row.instructor_name,
     myBookingId: mine?.id ?? null,
     myAttendance: mine ? mine.attendance : null,
-    myWaitlistPosition: null,
   }
 }
 
@@ -290,6 +394,7 @@ export function toMyBooking(row: MyBookingRow, details: ReadonlyMap<string, Sess
     classType: toClassTypeView(session.class_type),
     instructorName: session.instructor_name,
     refunded: row.refunded,
+    source: row.source === "waitlist" || row.source === "staff" ? row.source : "student",
     privateDetails: row.status === "confirmed" ? (details.get(row.session_id) ?? null) : null,
   }
 }

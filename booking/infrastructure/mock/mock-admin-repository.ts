@@ -8,7 +8,9 @@
  * `admin_upsert_class_type`, `create_session`, `admin_update_session` and `admin_cancel_session`
  * (same codes, same replay rules, all-or-nothing series). Phase 4.3 mirrors `admin_search_students`,
  * `admin_student_summary`, `grant_credits`, `admin_adjust_credits`, `admin_book_for` and
- * `admin_cancel_for`, writing the same append-only ledger rows (mock-ledger).
+ * `admin_cancel_for`, writing the same append-only ledger rows (mock-ledger). Phase 4.4: a cancellation
+ * or a capacity increase promotes from the waitlist, a session cancel / erasure closes waiting entries
+ * (mock-waitlist, migration 20261014001300).
  */
 import {
   attendanceWindow,
@@ -59,10 +61,12 @@ import {
   type TransportCode,
   type UpdateSessionCapacityCommand,
   type UpdateSessionResult,
+  type WaitlistRosterEntry,
 } from "../../application"
-import { DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
+import { DEMO_NEW_STUDENT_EMAIL, DEMO_NEW_STUDENT_ID, DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
 import type { MockBookingRepository } from "./mock-booking-repository"
 import { appendLedger } from "./mock-ledger"
+import { closeWaiting, promoteFromWaitlist } from "./mock-waitlist"
 
 export interface MockAdminRepositoryOptions {
   clock: Clock
@@ -77,6 +81,7 @@ const DEMO_NAMES = ["Ana", "Belén", "Carla", null, "Elena", "Flor", "Gina", "In
 
 function demoProfile(userId: string): { displayName: string | null; email: string | null } {
   if (userId === DEMO_USER_ID) return { displayName: "Alumna demo", email: null }
+  if (userId === DEMO_NEW_STUDENT_ID) return { displayName: null, email: DEMO_NEW_STUDENT_EMAIL }
   const n = Number(/^demo-user-(\d+)$/.exec(userId)?.[1] ?? 0)
   const name = n > 0 && n <= DEMO_NAMES.length ? DEMO_NAMES[n - 1] : `Alumna ${n}`
   // One unnamed user shows the email fallback in the roster.
@@ -135,6 +140,22 @@ export class MockAdminRepository implements AdminRepository {
         status: b.status,
         attendance: b.attendance,
         bookedAt: b.createdAt,
+      }))
+  }
+
+  async getWaitlist(sessionId: string): Promise<WaitlistRosterEntry[]> {
+    await this.delay()
+    this.requireStaff()
+    return this.state()
+      .waitlist.filter((e) => e.sessionId === sessionId)
+      .map((e) => ({
+        entryId: e.id,
+        userId: e.userId,
+        ...this.profileOf(e.userId),
+        status: e.status,
+        skipReason: e.skipReason,
+        joinedAt: e.createdAt,
+        resolvedAt: e.resolvedAt,
       }))
   }
 
@@ -261,12 +282,17 @@ export class MockAdminRepository implements AdminRepository {
     const session = sessions.find((x) => x.id === cmd.sessionId)
     if (!session) return { ok: false, code: "not_found" }
     if (session.status === "cancelled") return { ok: false, code: "session_cancelled" }
-    if (this.options.clock.now().getTime() >= toEpochMs(session.startsAt)) return { ok: false, code: "session_started" }
-    const confirmedCount = availability(session, bookings).booked
-    if (cmd.capacity < confirmedCount) return { ok: false, code: "capacity_below_bookings", confirmedCount }
+    const now = this.options.clock.now()
+    if (now.getTime() >= toEpochMs(session.startsAt)) return { ok: false, code: "session_started" }
+    const before = availability(session, bookings).booked
+    if (cmd.capacity < before) return { ok: false, code: "capacity_below_bookings", confirmedCount: before }
+    const grew = cmd.capacity > session.capacity
     const changed = session.capacity !== cmd.capacity
     session.capacity = cmd.capacity
-    return { ok: true, sessionId: session.id, capacity: cmd.capacity, confirmedCount, changed }
+    // New spots go to the waitlist first (same rule as admin_update_session).
+    const promoted = grew ? promoteFromWaitlist(this.state(), session.id, now) : 0
+    const confirmedCount = availability(session, bookings).booked
+    return { ok: true, sessionId: session.id, capacity: cmd.capacity, confirmedCount, changed, promoted }
   }
 
   async cancelSession(cmd: CancelSessionCommand): Promise<CancelSessionResult> {
@@ -307,6 +333,7 @@ export class MockAdminRepository implements AdminRepository {
       }
     }
     session.status = "cancelled"
+    closeWaiting(this.state().waitlist, (e) => e.sessionId === session.id, "session_cancelled", new Date(nowMs))
     return { ok: true, sessionId: session.id, cancelledBookings, refunded: refundedCount, refundsSkipped, replayed: false }
   }
 
@@ -535,6 +562,7 @@ export class MockAdminRepository implements AdminRepository {
       actorId: DEMO_STAFF_ID,
       createdAt: booking.createdAt,
     })
+    closeWaiting(state.waitlist, (e) => e.sessionId === session.id && e.userId === cmd.userId, "booked", now)
     return { ok: true, bookingId: booking.id, replayed: false, remainingCredits: this.summaryOf(cmd.userId).balance }
   }
 
@@ -546,7 +574,14 @@ export class MockAdminRepository implements AdminRepository {
     const booking = state.bookings.find((b) => b.id === cmd.bookingId)
     if (!booking) return { ok: false, code: "not_found" }
     if (booking.status !== "confirmed") {
-      return { ok: true, bookingId: booking.id, refunded: state.refunded.has(booking.id), refundSkipped: false, replayed: true }
+      return {
+        ok: true,
+        bookingId: booking.id,
+        refunded: state.refunded.has(booking.id),
+        refundSkipped: false,
+        replayed: true,
+        promoted: 0,
+      }
     }
     if (booking.attendance !== "unknown") return { ok: false, code: "cancellation_not_allowed" }
     booking.status = "cancelled"
@@ -572,7 +607,8 @@ export class MockAdminRepository implements AdminRepository {
         refundSkipped = true
       }
     }
-    return { ok: true, bookingId: booking.id, refunded, refundSkipped, replayed: false }
+    const promoted = promoteFromWaitlist(state, booking.sessionId, now)
+    return { ok: true, bookingId: booking.id, refunded, refundSkipped, replayed: false, promoted }
   }
 
   /**
@@ -608,6 +644,7 @@ export class MockAdminRepository implements AdminRepository {
     }
     for (const entry of state.ledger) if (entry.userId === cmd.userId) entry.note = null
     delete state.displayNames[cmd.userId]
+    closeWaiting(state.waitlist, (e) => e.userId === cmd.userId, "account_erased", this.options.clock.now())
     const anonymizedAt = this.options.clock.now().toISOString()
     state.anonymizedAt[cmd.userId] = anonymizedAt
     return { ok: true, userId: cmd.userId, anonymizedAt, replayed: false }

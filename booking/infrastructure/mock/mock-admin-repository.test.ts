@@ -352,6 +352,7 @@ describe("MockAdminRepository Phase 4.3 students + credits (mirror the RPCs)", (
       bookingId,
       refunded: true,
       refundSkipped: false,
+      promoted: 0,
       replayed: false,
     })
     expect(await cancelForStudent({ admin }, { bookingId, refund: true })).toMatchObject({ ok: true, replayed: true, refunded: true })

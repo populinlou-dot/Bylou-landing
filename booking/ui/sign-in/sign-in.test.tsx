@@ -93,13 +93,13 @@ describe("Sign in (email OTP)", () => {
     expect(screen.getByText("Te mandamos un código nuevo.")).toBeTruthy()
   })
 
-  it("redirects immediately when already signed in", () => {
+  it("redirects when already signed in (with a name)", async () => {
     renderSignIn(fakeAuth(), "/reservas/mis-reservas/")
-    expect(router.replace).toHaveBeenCalledWith("/reservas/mis-reservas/")
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/reservas/mis-reservas/"))
   })
 })
 
-describe("Profile completion after the first sign-in (UX backlog #4)", () => {
+describe("Required display name after sign-in (owner decision 2026-10-14)", () => {
   const RETURN_TO = "/reservas/sesion/?id=s-1&reservar=1"
 
   async function signInThroughCode(repository: BookingRepository) {
@@ -126,17 +126,17 @@ describe("Profile completion after the first sign-in (UX backlog #4)", () => {
     expect(router.replace).toHaveBeenCalledWith(RETURN_TO)
   })
 
-  it("is skippable: 'Ahora no' continues without saving", async () => {
-    const repository = fakeRepository([], { displayName: null })
-    const update = vi.spyOn(repository, "updateMyDisplayName")
-    await signInThroughCode(repository)
-    fireEvent.click(await screen.findByRole("button", { name: "Ahora no" }))
-    expect(router.replace).toHaveBeenCalledWith(RETURN_TO)
-    expect(update).not.toHaveBeenCalled()
+  it("cannot be skipped: there is no 'Ahora no' and the field is required", async () => {
+    await signInThroughCode(fakeRepository([], { displayName: null }))
+    const input = await screen.findByLabelText("Tu nombre")
+    expect(input.getAttribute("aria-required")).toBe("true")
+    expect(screen.queryByRole("button", { name: "Ahora no" })).toBeNull()
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Guardar"])
+    expect(router.replace).not.toHaveBeenCalled()
   })
 
   it.each([
-    ["   ", "Escribí tu nombre o tocá «Ahora no»."],
+    ["   ", "Escribí tu nombre para seguir."],
     ["a".repeat(81), "Usá hasta 80 caracteres."],
     ["Ana\u202e", "Hay caracteres que no podemos guardar. Probá solo con tu nombre."],
   ])("validates %j inline without calling the repository", async (value, message) => {
@@ -155,7 +155,7 @@ describe("Profile completion after the first sign-in (UX backlog #4)", () => {
     expect(router.replace).not.toHaveBeenCalled()
   })
 
-  it("shows a retryable error when saving fails and still lets the student skip", async () => {
+  it("shows a retryable error when saving fails, then continues once it is saved", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const repository = fakeRepository([], { displayName: null })
     vi.spyOn(repository, "updateMyDisplayName").mockResolvedValueOnce({ ok: false, code: "network_error" })
@@ -163,7 +163,8 @@ describe("Profile completion after the first sign-in (UX backlog #4)", () => {
     fireEvent.change(await screen.findByLabelText("Tu nombre"), { target: { value: "Ana" } })
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Guardar" })))
     expect(screen.getByRole("alert").textContent).toContain("No pudimos guardar tu nombre.")
-    fireEvent.click(screen.getByRole("button", { name: "Ahora no" }))
+    expect(router.replace).not.toHaveBeenCalled()
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Guardar" })))
     expect(router.replace).toHaveBeenCalledWith(RETURN_TO)
   })
 
@@ -180,10 +181,13 @@ describe("Profile completion after the first sign-in (UX backlog #4)", () => {
     expect(router.replace).toHaveBeenCalledWith(RETURN_TO)
   })
 
-  it("does not ask again when the visitor was already signed in", async () => {
+  it("asks an already signed-in visitor without a name before continuing", async () => {
     const repository = fakeRepository([], { displayName: null })
     renderSignIn(fakeAuth(), RETURN_TO, repository)
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith(RETURN_TO))
-    expect(repository.calls).not.toContain("getMyProfile")
+    expect(await screen.findByRole("heading", { name: "¿Cómo te llamamos?" })).toBeTruthy()
+    expect(router.replace).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText("Tu nombre"), { target: { value: "Ana" } })
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Guardar" })))
+    expect(router.replace).toHaveBeenCalledWith(RETURN_TO)
   })
 })

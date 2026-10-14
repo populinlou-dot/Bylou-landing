@@ -5,7 +5,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 
 ## Current phase
 
-**Pre-release hardening (churn throttle ADR-019, account erasure ADR-020, a11y pass) — DONE locally (uncommitted until orchestrator verification).** Phase 5.1 (demo-studio by config) + 5.2 (Playwright E2E) done. Next: rest of Phase 5.3 release checklist (CAPTCHA, owner items); Phase 4.4 waitlist still blocked on the owner promotion rule. Phase 4.3 (students + credits + sign-in fix) done; credit-expiry job (D10) done locally. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
+**Phase 4.4 waitlist (ADR-021) + required display name (ADR-022) — DONE locally (uncommitted until orchestrator verification).** Pre-release hardening (ADR-019, ADR-020, a11y pass), Phase 5.1 and 5.2 done. Next: rest of Phase 5.3 release checklist (CAPTCHA, owner items). Phase 4.3 (students + credits + sign-in fix) done; credit-expiry job (D10) done locally. Phases 4.1 and 4.2 done. Phase 3 (local) done. Hosted Supabase (3.5) waits on the owner following `SUPABASE_SETUP.md`. Phase 0 done (`545e5a4`), Phase 1 done (`13c9c92`, `99e86fe`, `b23205d`), Phase 2.1 done (`157bcc7`).
 
 | Workstream | Owner (logical agent) | Deliverable | Status |
 |---|---|---|---|
@@ -27,6 +27,7 @@ Branch: `feature/booking-core` (based on `origin/main` @ `b2d2535`).
 | **Credit-expiry job (D10)** + full/booked card fix | backend engineer | `20261014001100_credit_expiry_job.sql`, pgTAP `09`, races "journey D10", `mock-ledger.ts` `expireDueGrants`, `session-meta.tsx` | done locally: `private.expire_credit_grants(p_now)` zeroes unused credits of expired packs with one `expiry` ledger row (system, no note), 5-min grace, idempotent, `skip locked`; pg_cron hourly (`expire-credit-grants`, minute 7) enabled locally; hosted confirmation is an owner step (`SUPABASE_SETUP.md` §4). Unit 531/531, pgTAP 435/435, races 11/11, db lint clean |
 | **Phase 5.1** `demo-studio` by config (PL-01) | qa / frontend engineer | `brands/demo-studio`, `booking/config/copy.ts` (6 `meta.*` keys), `app/_booking/route-copy.ts` (route titles/descriptions from brand copy), `brands/brands.test.ts`, `booking/white-label.test.tsx` | done: zero diff in `booking/domain` + `booking/application`; every copy key non-empty for every registered brand; demo copy has no Bylou names/vocabulary/voseo; agenda, session detail, sign-in, Mis reservas, admin day and roster render under both brands (14 component tests); Bylou titles unchanged; unit 553/553 |
 | **Pre-release hardening** churn throttle (ADR-019), account erasure (ADR-020), a11y pass (UX_DESIGN §5.2) | backend + frontend + qa | `20261014001200_throttle_and_erasure.sql`, pgTAP `10`, race "journey ADR-020", `booking/admin/students/erase-sheet.tsx`, `tests/e2e/a11y.spec.ts`, `brands/contrast.test.ts`, `@axe-core/playwright` 4.13.0 (exact, dev) | done (+ security-review fixes: no-email confirmation by name/id, grant/adjust refuse erased students with the profile lock, `anonymized_by` audit, owner-ban note in the sheet): unit 570/570, pgTAP 520/520, races 13/13, db lint clean, E2E 65/65 (desktop 23, mobile 23, demo-studio 19; new tests ×3 repeats, no flakes), opt-in Supabase E2E 2/2, `pnpm install --frozen-lockfile` ok, no secrets in `out/`. See "Accessibility pass" below |
+| **Phase 4.4** waitlist (ADR-011 owner rule 2026-10-14, ADR-021) + required display name (ADR-022) | backend + frontend + qa | `20261014001300_waitlist.sql`, pgTAP `11_waitlist`, `tests/db/waitlist.test.ts`, `booking/ui/reserve/waitlist-action.tsx`, `booking/infrastructure/mock/mock-waitlist.ts`, `tests/e2e/waitlist.spec.ts` | done locally: FIFO promotion inside `cancel_booking` / `admin_cancel_for` / capacity increase (valid pack + more than `cancellation_window_hours` ahead, else skip), join/leave/place, Mis reservas list + "desde la lista" note, staff roster queue; `profile_incomplete` on `book_session` / `join_waitlist`, name step without "Ahora no". Unit 628/628, pgTAP 658/658, races 18/18, db lint clean, E2E 71/71 (after security-review fixes: random promotion keys + per-entry containment, self-cancellation limit on joins/promotion, invisible-name rule + CHECK, leave without lock, booking-close guard, caps 50/10) (+ new journey J and a11y waitlist screens; J ×3 repeats, no flakes), opt-in Supabase E2E 2/2, build ok, no secrets in `out/` |
 | **Phase 5.2** Playwright E2E on the static export (ADR-009) | qa / frontend engineer | `@playwright/test` 1.63.0 (exact, pnpm 9 lockfile), `playwright.config.ts`, `playwright.supabase.config.ts`, `tests/e2e/**` | done: 56/56 green (desktop 20, mobile Pixel 7 20, demo-studio build 16) in ~36 s + ~30 s for the two builds; 3 reruns + `--repeat-each=3` (168) with no flakes; opt-in Supabase run (B + F) 2/2 green, then `supabase db reset` |
 
 Phase 0 workstreams:
@@ -80,10 +81,10 @@ Carried over from a previous local setup session; intentionally left uncommitted
 - ~~Agenda card for a past session the student attended says "Ya tenés esta clase reservada"~~ → fixed: the application layer decides `entry.action` / `entry.myOutcome` in the domain order (cancelled → started → already booked → window → full); past cards read "Finalizada" + Asististe / No asististe / Reservada. Root cause: `ReserveAction` checked `myBookingId` before the session state. `SessionAvailability` now carries `myAttendance`.
 - ~~After booking from the agenda, the card behind the sheet still shows the old spots count until refresh~~ → fixed: a successful booking re-reads that session from the repository right away (`getAgendaEntry` + `replaceAgendaEntry`; silent week reload as fallback). Cancel lives only in Mis reservas, which already re-reads after success (now tested).
 - ~~Modality filter + remembered filter (PRD ST-01 AC4)~~ → shipped: Todas / Presencial / Online chips next to the practice chips; both filters remembered per device in `localStorage` (try/catch, page works when storage throws; stale practice falls back to "Todas").
-- ~~New users have no display name yet~~ → optional "¿Cómo te llamamos?" step after verifying the code when `profiles.display_name` is empty (save / "Ahora no"). No migration: the existing column grant `update (display_name, phone)` + `profiles_update_own` RLS already allow it (pgTAP E5 extended). Client validation: trim, 1–80 chars, no control/bidi characters. The mock demo student already has a name, so the step does not appear in the mock demo.
+- ~~New users have no display name yet~~ → optional "¿Cómo te llamamos?" step after verifying the code when `profiles.display_name` is empty (save / "Ahora no"). No migration: the existing column grant `update (display_name, phone)` + `profiles_update_own` RLS already allow it (pgTAP E5 extended). Client validation: trim, 1–80 chars, no control/bidi characters. The mock demo student already has a name, so the step does not appear in the mock demo. (Made required on 2026-10-14, see below.)
 
 - ~~A full session the student has booked shows both "Esta clase está completa." and "Ya tenés esta clase reservada."~~ → fixed in `statusText` (`booking/ui/session-meta.tsx`, the single source of the card/detail status line): when `entry.action === "booked"`, the full / closed / not-open reason is hidden; the "Completa" badge and spots-left stay (agenda test).
-- Profile step: name is optional and phone is not collected (PRD ST-03 AC2 says required name + phone). Owner to confirm.
+- ~~Profile step: name is optional~~ → owner decision 2026-10-14: the name is **required** (no "Ahora no"), phone not collected (ADR-022). The step also appears for an already signed-in visitor without a name, and inside the confirm sheet / waitlist action; the server answers `profile_incomplete`. The mock has a second demo student `nueva@…` (pack, no name) to show it.
 
 ## Pre-release checklist (from security review, not yet done)
 
@@ -129,14 +130,14 @@ Not blocking current work (Phase 2 runs on mock data). Needed before Phase 3:
 
 ## Owner decisions 2026-10-14
 
-- Waitlist rule approved: FIFO; auto-promote only with a valid pack and more than 24 h before start; otherwise skip to the next student.
+- Waitlist rule approved: FIFO; auto-promote only with a valid pack and more than 24 h before start; otherwise skip to the next student. **Implemented (Phase 4.4, ADR-021):** a student without a valid pack is marked `skipped` (she leaves the list, sees why in Mis reservas and may join again at the end); inside the window nobody is promoted, entries stay `waiting`, joining is closed and the freed spot is bookable first-come. No notifications: she sees the result the next time she opens the app.
 - Throttle limits approved: 6 self-cancellations / 3 bookings of the same class per 24 h.
 - Profile: display name required (plus the sign-in email); phone not collected.
 
 ## Next step
 
 1. **Owner:** follow `docs/booking/SUPABASE_SETUP.md`; send back only the project ref + checklist (never keys).
-2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~, ~~credit-expiry job~~ done. **Phase 4.4** waitlist: needs the owner's promotion rule (proposed: FIFO; auto-promote only with a valid pack and >24 h before start; otherwise skip). Phase 5.1, 5.2 and the pre-release hardening (throttle, erasure, a11y pass) done; next **Phase 5.3** release (remaining checklist: CAPTCHA, manual screen-reader/zoom pass, owner approves merge).
+2. ~~Phase 4.1~~, ~~4.2~~, ~~4.3~~, ~~credit-expiry job~~, ~~4.4 waitlist~~ done (4.4 uncommitted until orchestrator verification). Phase 5.1, 5.2 and the pre-release hardening (throttle, erasure, a11y pass) done; next **Phase 5.3** release (remaining checklist: CAPTCHA, manual screen-reader/zoom pass, owner approves merge).
 5. **Owner:** decide whether the auth record of an erased student must also lose its email (ADR-020: Admin API step outside the app, or a schema change). Confirm the throttle defaults (6 self-cancellations / 3 bookings of one class per 24 h) or give other numbers.
 3. **Owner:** after pushing migrations, confirm the `expire-credit-grants` pg_cron job is active (`SUPABASE_SETUP.md` §4, step 4).
 4. Fix UX backlog items above.
@@ -148,7 +149,7 @@ Requires Docker + Supabase CLI (`brew install supabase/tap/supabase`). Local onl
 ```
 npx pnpm@9 run db:start        # start local stack (studio/storage/realtime disabled)
 supabase db reset              # re-apply migrations + fake seed
-supabase test db               # pgTAP (520 assertions)
+supabase test db               # pgTAP (658 assertions)
 npx pnpm@9 run test:db         # multi-connection race tests
 npx pnpm@9 run db:stop
 ```
@@ -167,7 +168,7 @@ Playwright runs against the static export (`out/`), never `next dev`. Only Chrom
 
 ```
 npx pnpm@9 exec playwright install chromium   # once per machine
-npx pnpm@9 run test:e2e                       # builds mock exports (bylou + demo-studio), serves them, runs 65 tests (incl. a11y)
+npx pnpm@9 run test:e2e                       # builds mock exports (bylou + demo-studio), serves them, runs 71 tests (incl. a11y)
 E2E_SKIP_BUILD=1 npx pnpm@9 run test:e2e      # reuse the cached exports
 npx pnpm@9 exec playwright test --project mobile -g "B ·"   # one project / journey
 ```
@@ -176,6 +177,7 @@ npx pnpm@9 exec playwright test --project mobile -g "B ·"   # one project / jou
 - Reports and traces: `node_modules/.cache/bylou-e2e/{report,test-results}` (`npx pnpm@9 exec playwright show-report node_modules/.cache/bylou-e2e/report`). `.gitignore` was not touched (it has an unrelated pending change).
 - Projects: `desktop` (Desktop Chrome) and `mobile` (Pixel 7) run every Bylou journey; `demo-studio` runs the brand-agnostic journeys tagged `@white-label` plus the identity smoke on the `NEXT_PUBLIC_BOOKING_BRAND=demo-studio` build.
 - The browser clock is pinned to Wed 2026-10-14 09:00 (Buenos Aires) so the mock week, ids and occupancy are deterministic; external requests (fonts, analytics) get an empty 200; any console error or page error (incl. hydration mismatches) fails the test. Labels come from the brand copy, so a copy change updates the selectors.
+- Journey J (Phase 4.4, desktop + mobile): "nueva@demo.test" (pack, no name) books next Monday's 1:1 through the required name step; the demo student finds it full and joins the waitlist ("lugar 1", listed in Mis reservas); "nueva" cancels > 24 h ahead; the demo student is moved in (booking with "¡Se liberó un lugar!" note, pack 7 → 6). Second test: a signed-in student who walked away from the name step is asked for it inside the confirm sheet. a11y adds the waitlist screens (agenda/detail join, waiting, Mis reservas list, name step error).
 - Journeys: A agenda + type/modality filters + week paging; deep link + refresh (200, title, heading) on all 10 booking/admin routes; B OTP sign-in (demo code 123456) + book (double click books once) + Mis reservas; C full / finished / cancelled reasons and no-credit (demo staff account holds no pack) with contact link; D cancel >24 h refunds, <24 h denied with "Escribile a Lou" link; E student on `/admin/` sees "Sin acceso"; F staff publishes a class, opens rosters, marks attendance, grants a pack; G demo-studio theme/wordmark/vocabulary; H landing content intact and no link to `/reservas` or `/admin` (ADR-013).
 - Not in CI: `.github/workflows/main.yml` is unchanged.
 

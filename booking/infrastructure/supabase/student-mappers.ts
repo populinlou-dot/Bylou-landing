@@ -231,6 +231,7 @@ export function mapCancelForStudentRpc(data: unknown): CancelForStudentResult {
       refunded: data.refunded,
       refundSkipped: data.refund_skipped === true,
       replayed: data.replayed === true,
+      promoted: isCount(data.promoted) ? data.promoted : 0,
     }
   }
   if (data.ok === false && typeof data.code === "string" && CANCEL_FOR_CODES.includes(data.code)) {

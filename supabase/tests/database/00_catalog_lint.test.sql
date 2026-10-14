@@ -33,7 +33,7 @@ select is(
         'public.admin_anonymize_student', 'public.admin_book_for', 'public.admin_cancel_for', 'public.admin_cancel_session', 'public.admin_search_students',
         'public.admin_student_summary', 'public.admin_update_session', 'public.admin_upsert_class_type',
         'public.book_session', 'public.cancel_booking', 'public.create_session', 'public.grant_credits',
-        'public.mark_attendance'],
+        'public.join_waitlist', 'public.leave_waitlist', 'public.mark_attendance', 'public.my_waitlist_entries'],
   'E11 authenticated EXECUTE allow-list');
 
 -- No write privilege on any public table for anon/authenticated (profiles update is column-level only).

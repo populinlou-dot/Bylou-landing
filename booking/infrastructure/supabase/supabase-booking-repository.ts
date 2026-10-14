@@ -1,7 +1,8 @@
 /**
  * BookingRepository over Supabase (anon key + the user's JWT). Reads go through RLS-protected
- * tables / the security_invoker `session_availability` view; writes only through the
- * `book_session` / `cancel_booking` RPCs (ADR-005). No service-role key anywhere.
+ * tables / the security_invoker `session_availability` view (and the `my_waitlist_entries` definer read);
+ * writes only through the `book_session` / `cancel_booking` / `join_waitlist` / `leave_waitlist` RPCs
+ * (ADR-005). No service-role key anywhere.
  */
 import type { StudioRules } from "../../domain"
 import {
@@ -15,8 +16,12 @@ import {
   type Clock,
   type CreditBalance,
   type InstantRange,
+  type JoinWaitlistCommand,
+  type JoinWaitlistResult,
+  type LeaveWaitlistResult,
   type MyBooking,
   type MyProfile,
+  type MyWaitlistEntry,
   type SessionAvailability,
   type SessionPrivateDetails,
   type UpdateProfileResult,
@@ -25,6 +30,9 @@ import type { SupabaseClientProvider } from "./client"
 import {
   mapBookRpc,
   mapCancelRpc,
+  mapJoinWaitlistRpc,
+  mapLeaveWaitlistRpc,
+  mapMyWaitlistRpc,
   mapPostgrestError,
   toClassTypeView,
   toCreditBalance,
@@ -46,7 +54,7 @@ const SESSION_VIEW_COLUMNS =
   "id, class_type_id, class_type_name, starts_at, ends_at, modality, instructor_name, capacity, confirmed_count, status"
 const CLASS_TYPE_COLUMNS = "id, name, description, default_duration_minutes, default_capacity"
 const MY_BOOKING_COLUMNS =
-  "id, session_id, user_id, status, attendance, idempotency_key, credit_grant_id, created_at, refunded, " +
+  "id, session_id, user_id, status, attendance, idempotency_key, credit_grant_id, created_at, refunded, source, " +
   "session:sessions(id, class_type_id, starts_at, ends_at, capacity, modality, status, instructor_name, " +
   `class_type:class_types(${CLASS_TYPE_COLUMNS}))`
 const MY_BOOKINGS_LIMIT = 200
@@ -234,6 +242,32 @@ export class SupabaseBookingRepository implements BookingRepository {
     })) as Response<unknown>
     if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
     return mapCancelRpc(response.data)
+  }
+
+  async joinWaitlist(cmd: JoinWaitlistCommand): Promise<JoinWaitlistResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("join_waitlist", {
+      p_session_id: cmd.sessionId,
+      p_request_key: cmd.requestKey,
+    })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapJoinWaitlistRpc(response.data)
+  }
+
+  async leaveWaitlist(sessionId: string): Promise<LeaveWaitlistResult> {
+    if (!(await this.currentUserId())) return { ok: false, code: "unauthenticated" }
+    const response = (await this.client().rpc("leave_waitlist", { p_session_id: sessionId })) as Response<unknown>
+    if (response.error) return { ok: false, code: mapPostgrestError(response.error, response.status) }
+    return mapLeaveWaitlistRpc(response.data)
+  }
+
+  /** Definer read: her own entries + her place in each queue, nobody else's rows (migration 20261014001300). */
+  async listMyWaitlist(): Promise<MyWaitlistEntry[]> {
+    await this.requireUserId()
+    const response = (await this.client().rpc("my_waitlist_entries")) as Response<unknown>
+    const entries = mapMyWaitlistRpc(unwrap(response, "my_waitlist_entries"))
+    if (!entries) throw new RepositoryError("unknown", "my_waitlist_entries: unexpected shape")
+    return entries
   }
 
   /** Local session only (UX); the database re-checks auth.uid() on every call. */

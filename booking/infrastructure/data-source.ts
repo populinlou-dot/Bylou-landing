@@ -35,6 +35,8 @@ export const systemClock: Clock = { now: () => new Date() }
 export interface CreateRuntimeOptions {
   /** Brand rule defaults; they seed the mock adapter (ADR-014). */
   rules: StudioRules
+  /** Brand flag `features.waitlist`; the mock adapter uses it as its `studio_settings.waitlist_enabled`. */
+  waitlist?: boolean
   clock?: Clock
   mockLatencyMs?: number
   /** Raw NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (required for "supabase"). */
@@ -96,6 +98,7 @@ export function createBookingAdapters(rawDataSource: string | null | undefined, 
     rules: options.rules,
     latencyMs: options.mockLatencyMs,
     currentUserId,
+    waitlistEnabled: options.waitlist ?? false,
   })
   return {
     admin: new MockAdminRepository({ clock, store: repository, latencyMs: options.mockLatencyMs, currentUserId }),

@@ -40,6 +40,7 @@ import {
   type StaffRole,
   type UpdateSessionCapacityCommand,
   type UpdateSessionResult,
+  type WaitlistRosterEntry,
 } from "../../application"
 import type { SupabaseClientProvider } from "./client"
 import {
@@ -52,9 +53,11 @@ import {
   toAdminSessionView,
   toRosterEntry,
   toStaffRole,
+  toWaitlistRosterEntry,
   type AdminClassTypeRow,
   type AdminSessionRow,
   type RosterRow,
+  type WaitlistRow,
 } from "./admin-mappers"
 import { mapPostgrestError, type PostgrestErrorLike } from "./mappers"
 import {
@@ -79,6 +82,9 @@ const ADMIN_SESSION_COLUMNS =
 /** bookings has four FKs to profiles; the hint picks the student (`user_id`). Explicit columns only. */
 const ROSTER_COLUMNS =
   "id, user_id, status, attendance, created_at, profile:profiles!bookings_user_id_fkey(display_name, email)"
+/** waitlist_entries has one FK to profiles; the hint keeps the embed explicit (pgTAP 11 pins the name). */
+const WAITLIST_COLUMNS =
+  "id, user_id, status, skip_reason, created_at, resolved_at, profile:profiles!waitlist_entries_user_id_fkey(display_name, email)"
 const CLASS_TYPE_COLUMNS =
   "id, name, description, default_duration_minutes, default_capacity, default_modality, is_published, sort_order"
 const GRANT_COLUMNS = "id, credits_total, credits_remaining, valid_from, expires_at, note, created_at"
@@ -156,6 +162,19 @@ export class SupabaseAdminRepository implements AdminRepository {
       .order("id")
       .limit(ROW_LIMIT)
     return unwrap(response as unknown as Response<RosterRow[]>, "bookings").map(toRosterEntry)
+  }
+
+  /** Plain RLS read (staff see every entry, ADR-015); join order = FIFO order. */
+  async getWaitlist(sessionId: string): Promise<WaitlistRosterEntry[]> {
+    await this.requireUserId()
+    const response = await this.client()
+      .from("waitlist_entries")
+      .select(WAITLIST_COLUMNS)
+      .eq("session_id", sessionId)
+      .order("created_at")
+      .order("id")
+      .limit(ROW_LIMIT)
+    return unwrap(response as unknown as Response<WaitlistRow[]>, "waitlist_entries").map(toWaitlistRosterEntry)
   }
 
   async markAttendance(cmd: MarkAttendanceCommand): Promise<MarkAttendanceResult> {

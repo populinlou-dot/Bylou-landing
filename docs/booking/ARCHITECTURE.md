@@ -224,8 +224,14 @@ One vocabulary for `booking/domain` decisions, RPC JSON `code`, application resu
 |---|---|---|---|
 | `capacity_below_bookings` | `admin_update_session` (Phase 4) | New capacity < confirmed bookings | inline field error |
 | `attendance_window_closed` | `mark_attendance` (Phase 4) | Outside `starts_at − 15 min … ends_at + 7 days` | attendance read-only text |
-| `session_not_full` | `join_waitlist` (Phase 4) | Session has free spots | show "Reservar" instead |
+| `session_not_full` | `join_waitlist` (Phase 4.4) | Session has free spots | `waitlist.notFull`; the session is re-read and shows "Reservar" |
+| `waitlist_closed` | `join_waitlist` (ADR-021) | The class starts within `cancellation_window_hours`: nobody would be promoted | `waitlist.closed` |
+| `waitlist_disabled` | `join_waitlist`, `leave_waitlist` (ADR-021) | `studio_settings.waitlist_enabled` is off | `waitlist.error` |
+| `profile_incomplete` | `book_session`, `join_waitlist` (ADR-022) | The caller has no display name | the required name form in the confirm sheet / waitlist action |
 | `too_many_changes` | `book_session` (ADR-019) | Churn throttle: the student reached `max_self_cancellations_24h` self-cancellations, or `max_session_bookings_24h` bookings of this session, in the last 24 h (`limit`: `cancellations` / `session_rebookings`) | `sheet.tooManyChanges` + contact link in the confirm sheet, no retry |
+| `too_many_changes` | `join_waitlist` (ADR-021) | ADR-019 self-cancellation limit reached (`limit`: `cancellations`) or `max_session_bookings_24h` joins of this session in 24 h (`limit`: `waitlist_joins`) | `waitlist.tooManyChanges` + contact link |
+| `waitlist_full` | `join_waitlist` (ADR-021) | 50 students already waiting for this session | `waitlist.full` |
+| `too_many_waitlists` | `join_waitlist` (ADR-021) | She already waits for 10 upcoming sessions | `waitlist.tooMany` |
 | `email_mismatch` | `admin_anonymize_student` (ADR-020) | Typed confirmation ≠ the student's current email | field error on the confirmation input |
 | `has_upcoming_bookings` | `admin_anonymize_student` (ADR-020) | She still has confirmed bookings of sessions that have not ended (`upcoming` = count) | `admin.erase.upcoming`: cancel them first |
 

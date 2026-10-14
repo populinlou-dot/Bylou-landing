@@ -6,10 +6,10 @@
 -- =============================================================================
 
 -- Studio rules = brands/bylou rules (ADR-011 / ADR-014): AR timezone, opens 30 d, closes 0 min,
--- free cancellation up to 24 h, late cancellation denied, 1 credit per booking.
+-- free cancellation up to 24 h, late cancellation denied, 1 credit per booking, waitlist on (owner 2026-10-14).
 insert into public.studio_settings (id, timezone, booking_opens_days, booking_closes_minutes,
   cancellation_window_hours, late_cancel_policy, student_cancellation_enabled, credits_per_booking, waitlist_enabled)
-values (1, 'America/Argentina/Buenos_Aires', 30, 0, 24, 'deny', true, 1, false)
+values (1, 'America/Argentina/Buenos_Aires', 30, 0, 24, 'deny', true, 1, true)
 on conflict (id) do update set
   timezone = excluded.timezone, booking_opens_days = excluded.booking_opens_days,
   booking_closes_minutes = excluded.booking_closes_minutes,

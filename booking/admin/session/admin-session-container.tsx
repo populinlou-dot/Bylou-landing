@@ -15,7 +15,7 @@ import {
   type RosterEntry,
 } from "../../application"
 import { ATTENDANCE_EDITABLE_DAYS, ATTENDANCE_OPENS_MINUTES_BEFORE } from "../../domain"
-import { useCopy, useReadyRuntime, type Translate } from "../../ui/booking-context"
+import { useBooking, useCopy, useReadyRuntime, type Translate } from "../../ui/booking-context"
 import { useAdminRepository } from "../admin-context"
 import { parseWholeNumber } from "../form-fields"
 import { AdminSessionView, type AdminSessionLoadState } from "./admin-session-view"
@@ -43,6 +43,7 @@ function attendanceErrorMessage(code: AttendanceCode, upcoming: boolean, t: Tran
 export function AdminSessionContainer({ id }: { id: string | null }) {
   const { repository, clock } = useReadyRuntime()
   const admin = useAdminRepository()
+  const waitlist = useBooking().brand.features.waitlist
   const t = useCopy()
   const [attempt, setAttempt] = useState(0)
   const [load, setLoad] = useState<AdminSessionLoadState>(() =>
@@ -69,7 +70,7 @@ export function AdminSessionContainer({ id }: { id: string | null }) {
     }
     let active = true
     setLoad({ status: "loading" })
-    getAdminSessionDetail({ admin, repository, clock }, { id }).then(
+    getAdminSessionDetail({ admin, repository, clock, waitlist }, { id }).then(
       (detail) => {
         if (!active) return
         setLoad(detail ? { status: "ready", detail } : { status: "not_found" })
@@ -84,7 +85,7 @@ export function AdminSessionContainer({ id }: { id: string | null }) {
     return () => {
       active = false
     }
-  }, [admin, repository, clock, id, attempt])
+  }, [admin, repository, clock, waitlist, id, attempt])
 
   const onMark = useCallback(
     async (entry: RosterEntry, mark: AttendanceMark) => {
@@ -126,7 +127,7 @@ export function AdminSessionContainer({ id }: { id: string | null }) {
   /** Background reload after a session-level write: keeps the page on screen. */
   const refresh = useCallback(() => {
     if (!isValidSessionId(id)) return
-    getAdminSessionDetail({ admin, repository, clock }, { id }).then(
+    getAdminSessionDetail({ admin, repository, clock, waitlist }, { id }).then(
       (detail) => {
         if (!detail) return
         setLoad({ status: "ready", detail })
@@ -134,7 +135,7 @@ export function AdminSessionContainer({ id }: { id: string | null }) {
       },
       (error: unknown) => console.error("[admin] roster refresh failed", error),
     )
-  }, [admin, repository, clock, id])
+  }, [admin, repository, clock, waitlist, id])
 
   async function onCapacitySubmit() {
     const current = loadRef.current
@@ -169,7 +170,9 @@ export function AdminSessionContainer({ id }: { id: string | null }) {
       )
       setCapacityValue(String(result.capacity))
       setCapacityPhase({ status: "idle" })
-      setActionNotice(t("admin.capacity.saved"))
+      setActionNotice(result.promoted > 0 ? t("admin.capacity.promoted", { n: result.promoted }) : t("admin.capacity.saved"))
+      // New spots may have gone to the waitlist: re-read roster + list from the server.
+      if (result.promoted > 0) refresh()
       return
     }
     if (result.code === "unknown") console.error("[admin] admin_update_session returned an unmapped result")

@@ -20,6 +20,7 @@ import { loadAgendaFilters, saveAgendaFilters } from "./filter-storage"
 export function AgendaContainer() {
   const { repository, clock } = useReadyRuntime()
   const { brand } = useBooking()
+  const waitlist = brand.features.waitlist
   const [weekOffset, setWeekOffset] = useState(0)
   // Null until the remembered filters are read after mount, so the first render matches the static HTML.
   const [filters, setFilters] = useState<AgendaFilters | null>(null)
@@ -46,7 +47,7 @@ export function AgendaContainer() {
   /** After a booking: re-read only that session; a failed re-read falls back to a silent full reload. */
   const refresh = useCallback(
     (sessionId: string) => {
-      getAgendaEntry({ repository, clock }, sessionId).then(
+      getAgendaEntry({ repository, clock, waitlist }, sessionId).then(
         (entry) =>
           setLoad((current) =>
             current.status === "ready" ? { status: "ready", week: replaceAgendaEntry(current.week, sessionId, entry) } : current,
@@ -58,7 +59,7 @@ export function AgendaContainer() {
         },
       )
     },
-    [repository, clock],
+    [repository, clock, waitlist],
   )
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export function AgendaContainer() {
     // A silent refresh keeps the cards mounted so focus is not lost.
     if (!silent.current) setLoad({ status: "loading" })
     silent.current = false
-    getAgendaWeek({ repository, clock }, { weekOffset, classTypeId: filters.classTypeId, modality: filters.modality }).then(
+    getAgendaWeek({ repository, clock, waitlist }, { weekOffset, classTypeId: filters.classTypeId, modality: filters.modality }).then(
       (week) => {
         if (!active) return
         const reconciled = reconcileAgendaFilters(filters, week.classTypes)
@@ -89,7 +90,7 @@ export function AgendaContainer() {
     return () => {
       active = false
     }
-  }, [repository, clock, weekOffset, filters, attempt, authKey, brand.id])
+  }, [repository, clock, waitlist, weekOffset, filters, attempt, authKey, brand.id])
 
   return (
     <DataRefreshContext.Provider value={refresh}>

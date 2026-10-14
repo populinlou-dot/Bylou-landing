@@ -3,13 +3,14 @@
 import { useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getSessionDetail, isValidSessionId } from "../../application"
-import { useAuthKey, useReadyRuntime } from "../booking-context"
+import { useAuthKey, useBooking, useReadyRuntime } from "../booking-context"
 import { DataRefreshContext } from "../reserve/refresh-context"
 import { SessionDetailView, type SessionDetailLoadState } from "./session-detail-view"
 
 /** Loads one session by id. Invalid/unknown ids resolve to the not-found state (ST-02). */
 export function SessionDetailContainer({ id, reopenSheet = false }: { id: string | null; reopenSheet?: boolean }) {
   const { repository, clock } = useReadyRuntime()
+  const waitlist = useBooking().brand.features.waitlist
   const authKey = useAuthKey()
   const [attempt, setAttempt] = useState(0)
   const silent = useRef(false)
@@ -31,7 +32,7 @@ export function SessionDetailContainer({ id, reopenSheet = false }: { id: string
     let active = true
     if (!silent.current) setLoad({ status: "loading" })
     silent.current = false
-    getSessionDetail({ repository, clock }, { id }).then(
+    getSessionDetail({ repository, clock, waitlist }, { id }).then(
       (detail) => {
         if (active) setLoad(detail ? { status: "ready", detail } : { status: "not_found" })
       },
@@ -44,7 +45,7 @@ export function SessionDetailContainer({ id, reopenSheet = false }: { id: string
     return () => {
       active = false
     }
-  }, [repository, clock, id, attempt, authKey])
+  }, [repository, clock, waitlist, id, attempt, authKey])
 
   return (
     <DataRefreshContext.Provider value={refresh}>

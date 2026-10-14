@@ -263,6 +263,7 @@ function BookingsSection({
                 <div className="flex flex-wrap items-center gap-2">
                   {onCancelFor ? null : <Badge tone="neutral">{bookingOutcome(booking, t)}</Badge>}
                   {booking.source === "staff" ? <Badge tone="brand">{t("admin.student.byStaff")}</Badge> : null}
+                  {booking.source === "waitlist" ? <Badge tone="brand">{t("admin.student.fromWaitlist")}</Badge> : null}
                   {booking.refunded ? <Badge tone="neutral">{t("admin.student.refunded")}</Badge> : null}
                 </div>
                 {onCancelFor ? (

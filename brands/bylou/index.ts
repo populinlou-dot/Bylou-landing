@@ -22,5 +22,7 @@ export const bylouBrand: BrandConfig = {
     cancellationWindowHours: 24,
     lateCancelPolicy: "deny",
   },
-  features: { ...DEFAULT_FEATURE_FLAGS },
+  // Owner decision 2026-10-14: waitlist on (FIFO; promoted only with a valid pack and more than the
+  // cancellation window ahead). The database enforces it through studio_settings.waitlist_enabled.
+  features: { ...DEFAULT_FEATURE_FLAGS, waitlist: true },
 }

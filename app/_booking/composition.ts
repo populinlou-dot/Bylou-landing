@@ -38,6 +38,7 @@ function compose(): BookingComposition {
   const { brand } = brandResolution
   const { runtime, admin } = createBookingAdapters(process.env.NEXT_PUBLIC_BOOKING_DATA_SOURCE, {
     rules: brand.rules,
+    waitlist: brand.features.waitlist,
     mockLatencyMs: 250,
     // Public values only (anon/publishable key); written literally so Next inlines them at build.
     supabase: {

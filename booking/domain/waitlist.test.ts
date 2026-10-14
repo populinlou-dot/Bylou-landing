@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { makeGrant, makeSession, makeWaitlistEntry } from "./test-fixtures"
+import { RULES, atOffset, makeGrant, makeSession, makeWaitlistEntry } from "./test-fixtures"
 import type { CreditGrant } from "./types"
-import { nextWaitlistCandidate } from "./waitlist"
+import { isWaitlistPromotionOpen, nextWaitlistCandidate } from "./waitlist"
 
 const session = makeSession()
 const grantsFor =
@@ -36,7 +36,10 @@ describe("nextWaitlistCandidate", () => {
     const result = nextWaitlistCandidate(session, entries, grants, 1)
     expect(result.candidate?.id).toBe("w3")
     expect(result.grantId).toBe("g-ok")
-    expect(result.skipped.map((e) => e.id)).toEqual(["w1", "w2"])
+    expect(result.skipped.map((s) => [s.entry.id, s.reason])).toEqual([
+      ["w1", "no_valid_credit"],
+      ["w2", "no_valid_credit"],
+    ])
   })
 
   it("ignores entries that are not waiting or belong to other sessions", () => {
@@ -62,7 +65,41 @@ describe("nextWaitlistCandidate", () => {
     expect(nextWaitlistCandidate(session, entries, grantsFor({}), 1)).toEqual({
       candidate: null,
       grantId: null,
-      skipped: entries,
+      skipped: [{ entry: entries[0], reason: "no_valid_credit" }],
     })
+  })
+
+  it("skips a student who already holds a booking of the session, before looking at her credit", () => {
+    const entries = [
+      makeWaitlistEntry({ id: "w1", userId: "booked", createdAt: "2026-10-10T00:00:00.000Z" }),
+      makeWaitlistEntry({ id: "w2", userId: "ok", createdAt: "2026-10-11T00:00:00.000Z" }),
+    ]
+    const grants = grantsFor({ booked: [makeGrant({ userId: "booked" })], ok: [makeGrant({ id: "g-ok", userId: "ok" })] })
+    const result = nextWaitlistCandidate(session, entries, grants, 1, (userId) => (userId === "booked" ? "already_booked" : null))
+    expect(result.candidate?.id).toBe("w2")
+    expect(result.skipped).toEqual([{ entry: entries[0], reason: "already_booked" }])
+  })
+})
+
+describe("isWaitlistPromotionOpen (owner rule: more than the cancellation window ahead)", () => {
+  const HOUR = 60 * 60_000
+  it("is open while the session starts more than cancellationWindowHours from now", () => {
+    expect(isWaitlistPromotionOpen(session, RULES, atOffset(-25 * HOUR))).toBe(true)
+    expect(isWaitlistPromotionOpen(session, RULES, atOffset(-24 * HOUR - 1))).toBe(true)
+  })
+
+  it("is closed exactly at the window edge and inside it", () => {
+    expect(isWaitlistPromotionOpen(session, RULES, atOffset(-24 * HOUR))).toBe(false)
+    expect(isWaitlistPromotionOpen(session, RULES, atOffset(-HOUR))).toBe(false)
+  })
+
+  it("follows the studio setting, not a constant", () => {
+    const rules = { ...RULES, cancellationWindowHours: 48 }
+    expect(isWaitlistPromotionOpen(session, rules, atOffset(-30 * HOUR))).toBe(false)
+    expect(isWaitlistPromotionOpen(session, { ...RULES, cancellationWindowHours: 0 }, atOffset(-1))).toBe(true)
+  })
+
+  it("never promotes into a cancelled session", () => {
+    expect(isWaitlistPromotionOpen(makeSession({ status: "cancelled" }), RULES, atOffset(-72 * HOUR))).toBe(false)
   })
 })

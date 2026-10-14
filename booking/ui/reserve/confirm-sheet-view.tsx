@@ -2,6 +2,7 @@
 
 import { AlertCircle, CalendarClock, CheckCircle2, UserRound } from "lucide-react"
 import Link from "next/link"
+import { useId } from "react"
 import type { AgendaEntry, BookCode } from "../../application"
 import { MY_BOOKINGS_PATH } from "../../application"
 import { useBooking, useCopy, type Translate } from "../booking-context"
@@ -10,6 +11,7 @@ import { formatDayHeading, formatTime } from "../format"
 import { buttonClass } from "../primitives"
 import { ModalityIcon, useModalityLabel } from "../session-meta"
 import { Sheet } from "../sheet"
+import { ProfileNameForm, type ProfileNameFormProps } from "../sign-in/profile-name-view"
 
 export type BalanceState = { status: "loading" } | { status: "ready"; available: number } | { status: "error" }
 
@@ -27,6 +29,8 @@ export interface ConfirmSheetViewProps {
   policyHours: number | null
   creditsPerBooking: number
   phase: ConfirmPhase
+  /** Set while she has no display name yet: the required name form replaces the confirm button. */
+  nameStep?: Omit<ProfileNameFormProps, "describedBy"> | null
   onConfirm: () => void
   onClose: () => void
 }
@@ -48,6 +52,8 @@ export function bookFailureMessage(code: BookCode, t: Translate): string {
       return t(`reason.${code}`)
     case "too_many_changes":
       return t("sheet.tooManyChanges")
+    case "profile_incomplete":
+      return t("profile.required")
     case "not_found":
       return t("error.notFound")
     case "forbidden":
@@ -68,10 +74,12 @@ export function ConfirmSheetView(props: ConfirmSheetViewProps) {
   const { brand } = useBooking()
   const t = useCopy()
   const modalityLabel = useModalityLabel()
+  const nameIntroId = useId()
   const pending = phase.status === "pending"
   const failed = phase.status === "failed" ? phase.code : null
+  const nameStep = props.nameStep ?? null
   const noCredit = (balance.status === "ready" && balance.available < props.creditsPerBooking) || failed === "no_valid_credit"
-  const canConfirm = phase.status !== "success" && !noCredit && (failed === null || RETRYABLE.includes(failed))
+  const canConfirm = phase.status !== "success" && !nameStep && !noCredit && (failed === null || RETRYABLE.includes(failed))
 
   return (
     <Sheet title={phase.status === "success" ? t("success.title") : entry.classType.name} onClose={props.onClose} closeDisabled={pending}>
@@ -125,12 +133,21 @@ export function ConfirmSheetView(props: ConfirmSheetViewProps) {
           {props.policyHours !== null ? <p className="text-muted-foreground">{t("sheet.policy", { h: props.policyHours })}</p> : null}
           {entry.session.modality === "online" ? <p className="text-muted-foreground">{t("sheet.online")}</p> : null}
 
+          {nameStep && !noCredit ? (
+            <div className="flex flex-col gap-3 rounded-[var(--radius)] bg-secondary p-4">
+              <p id={nameIntroId} className="font-semibold text-foreground">
+                {t("profile.required")}
+              </p>
+              <ProfileNameForm {...nameStep} describedBy={nameIntroId} />
+            </div>
+          ) : null}
+
           {noCredit ? (
             <div role="alert" className="flex flex-col items-start gap-2 rounded-[var(--radius)] bg-secondary p-4">
               <p className="font-semibold text-foreground">{t("pack.none")}</p>
               <ContactLink label={t("pack.none.cta")} />
             </div>
-          ) : failed ? (
+          ) : failed && failed !== "profile_incomplete" ? (
             <div role="alert" className="flex flex-col items-start gap-2 rounded-[var(--radius)] bg-secondary p-4">
               <p className="flex items-start gap-2 font-semibold text-foreground">
                 <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />

@@ -15,7 +15,7 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
   const authState = useAuthState()
   const router = useRouter()
   const t = useCopy()
-  /** "name" = optional profile step right after verifying the code (no display name yet). */
+  /** "name" = required profile step (no display name yet; owner decision 2026-10-14). */
   const [step, setStep] = useState<SignInStep | "name">("email")
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
@@ -29,10 +29,19 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
   // Set while verify() owns the navigation (it may show the profile step before leaving).
   const verifying = useRef(false)
 
-  // Already signed in when arriving: continue to the validated destination.
+  // Already signed in when arriving: ask for the missing name first, else continue to the destination.
   useEffect(() => {
-    if (authState.status === "signed_in" && !verifying.current) router.replace(returnTo)
-  }, [authState.status, returnTo, router])
+    if (authState.status !== "signed_in" || verifying.current) return
+    let active = true
+    needsDisplayName({ repository }).then((missing) => {
+      if (!active) return
+      if (missing) setStep("name")
+      else router.replace(returnTo)
+    })
+    return () => {
+      active = false
+    }
+  }, [authState.status, repository, returnTo, router])
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -69,7 +78,7 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
       setError(result.code)
       return
     }
-    // First sign-in without a name: offer the optional step (a failed check just skips it).
+    // No name yet: the required step comes first (a failed check continues; the server still asks for it).
     if (await needsDisplayName({ repository })) {
       setPending(false)
       setStep("name")
@@ -107,7 +116,6 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
           if (nameError) setNameError(null)
         }}
         onSubmit={() => void saveName()}
-        onSkip={() => router.replace(returnTo)}
       />
     )
   }

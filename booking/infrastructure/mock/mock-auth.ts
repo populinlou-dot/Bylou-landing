@@ -3,17 +3,22 @@
  * returned by requestCode and shown on screen (ARCHITECTURE §10). Every email signs in as the
  * same fictional demo student, so the demo pack and history are always there — except an
  * address whose local part is "staff" (e.g. staff@demo.test), which signs in as the fictional
- * demo staff member so the /admin/ demo works (Phase 4.1).
+ * demo staff member so the /admin/ demo works (Phase 4.1), and "nueva" (e.g. nueva@demo.test), a second
+ * fictional student who has a pack but no name yet (required name step, waitlist journey; Phase 4.4).
  */
 import type { AuthPort, AuthUser, RequestCodeResult, VerifyCodeResult } from "../../application"
 
 export const DEMO_OTP_CODE = "123456"
 export const DEMO_USER_ID = "demo-alumna"
 export const DEMO_STAFF_ID = "demo-staff"
+/** Second demo student: a pack, no display name yet (Phase 4.4). */
+export const DEMO_NEW_STUDENT_ID = "demo-alumna-nueva"
+export const DEMO_NEW_STUDENT_EMAIL = "nueva@demo.test"
 /** Shown as a hint on the admin sign-in state in demo mode. */
 export const DEMO_STAFF_EMAIL = "staff@demo.test"
 
 const isDemoStaffEmail = (email: string) => email.split("@")[0] === "staff"
+const isDemoNewStudentEmail = (email: string) => email.split("@")[0] === "nueva"
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -56,7 +61,8 @@ export class MockAuth implements AuthPort {
     if (!EMAIL.test(normalized)) return { ok: false, code: "invalid_email" }
     if (this.pendingEmail !== normalized || code.trim() !== DEMO_OTP_CODE) return { ok: false, code: "invalid_code" }
     this.pendingEmail = null
-    const user = { id: isDemoStaffEmail(normalized) ? DEMO_STAFF_ID : DEMO_USER_ID, email: normalized }
+    const id = isDemoStaffEmail(normalized) ? DEMO_STAFF_ID : isDemoNewStudentEmail(normalized) ? DEMO_NEW_STUDENT_ID : DEMO_USER_ID
+    const user = { id, email: normalized }
     this.setUser(user)
     return { ok: true, user: { ...user } }
   }

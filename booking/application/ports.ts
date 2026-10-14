@@ -6,6 +6,8 @@
 import type {
   Attendance,
   Booking,
+  WaitlistSkipReason,
+  WaitlistStatus,
   BookingRejectionCode,
   CancellationCode,
   ClassType,
@@ -47,8 +49,6 @@ export interface SessionAvailability {
   myBookingId: string | null
   /** Attendance recorded on that booking; null exactly when `myBookingId` is null. */
   myAttendance: Attendance | null
-  /** Phase 4. */
-  myWaitlistPosition: number | null
 }
 
 /**
@@ -68,6 +68,8 @@ export interface MyBooking {
   instructorName: string | null
   /** True when the debited credit went back to the pack on cancellation. */
   refunded: boolean
+  /** "waitlist" = she was moved into this class from the waitlist (Phase 4.4). */
+  source: BookingSource
   /** Present only for confirmed bookings the backend still shares details for. */
   privateDetails: SessionPrivateDetails | null
 }
@@ -95,11 +97,11 @@ export const TRANSPORT_CODES = ["unauthenticated", "forbidden", "invalid_input",
 export type TransportCode = (typeof TRANSPORT_CODES)[number]
 
 /**
- * Application/RPC-only codes of `book_session` (not domain rules): `not_found` (unknown or invisible id) and
+ * Application/RPC-only codes of `book_session` (not domain rules): `not_found` (unknown or invisible id),
  * `too_many_changes` (churn throttle, ADR-019: too many self-cancellations, or re-bookings of the same
- * session, in the last 24 h).
+ * session, in the last 24 h) and `profile_incomplete` (no display name yet; owner decision 2026-10-14).
  */
-export const BOOK_RPC_CODES = ["not_found", "too_many_changes"] as const
+export const BOOK_RPC_CODES = ["not_found", "too_many_changes", "profile_incomplete"] as const
 export type BookCode = BookingRejectionCode | (typeof BOOK_RPC_CODES)[number] | TransportCode
 export type CancelCode = CancellationCode | "not_found" | "not_owner" | TransportCode
 
@@ -143,6 +145,61 @@ export interface MyProfile {
 
 export type UpdateProfileResult = { ok: true; displayName: string } | { ok: false; code: TransportCode }
 
+/* ---------- Waitlist (Phase 4.4, PRD ST-12, ADR-021) ---------- */
+
+/**
+ * Business refusals of `join_waitlist` / `leave_waitlist` (application/RPC codes): the session is not full,
+ * the list is closed because the class starts within the cancellation window, the studio has the waitlist off,
+ * the queue is full (50) or she already waits for 10 classes, plus the codes shared with `book_session`.
+ */
+export const WAITLIST_CODES = [
+  "session_not_full",
+  "waitlist_closed",
+  "waitlist_disabled",
+  "already_booked",
+  "session_cancelled",
+  "session_started",
+  "booking_not_open",
+  "booking_closed",
+  "too_many_changes",
+  "profile_incomplete",
+  "waitlist_full",
+  "too_many_waitlists",
+  "not_found",
+] as const
+export type WaitlistCode = (typeof WAITLIST_CODES)[number] | TransportCode
+
+export interface JoinWaitlistCommand {
+  sessionId: string
+  /** Generated once per tap and reused on retries: the server replays instead of joining twice. */
+  requestKey: string
+}
+
+export type JoinWaitlistResult =
+  | { ok: true; entryId: string; status: WaitlistStatus; position: number | null; replayed: boolean }
+  | { ok: false; code: WaitlistCode }
+
+/** State-idempotent: no waiting entry left answers ok with the latest status (she may have been promoted). */
+export type LeaveWaitlistResult =
+  | { ok: true; status: WaitlistStatus; bookingId: string | null; replayed: boolean }
+  | { ok: false; code: WaitlistCode }
+
+/** One of the signed-in student's own waitlist entries, with the class it belongs to. */
+export interface MyWaitlistEntry {
+  entryId: string
+  session: Session
+  classTypeName: string
+  instructorName: string | null
+  status: WaitlistStatus
+  skipReason: WaitlistSkipReason | null
+  /** 1-based place in the queue while waiting; null once resolved. */
+  position: number | null
+  /** The booking she got when promoted. */
+  bookingId: string | null
+  createdAt: IsoDateTime
+  resolvedAt: IsoDateTime | null
+}
+
 export interface BookingRepository {
   getStudioRules(): Promise<StudioRules>
   listClassTypes(): Promise<ClassTypeView[]>
@@ -161,6 +218,11 @@ export interface BookingRepository {
   getMyProfile(): Promise<MyProfile>
   /** Expects an already validated name (see `validateDisplayName`); refusals come back as data. */
   updateMyDisplayName(displayName: string): Promise<UpdateProfileResult>
+  /** Phase 4.4. Business refusals come back as data. */
+  joinWaitlist(cmd: JoinWaitlistCommand): Promise<JoinWaitlistResult>
+  leaveWaitlist(sessionId: string): Promise<LeaveWaitlistResult>
+  /** Her own entries, newest first. Throws RepositoryError("unauthenticated") when signed out. */
+  listMyWaitlist(): Promise<MyWaitlistEntry[]>
 }
 
 export interface AuthUser {
@@ -296,7 +358,8 @@ export const UPDATE_SESSION_CODES = ["capacity_below_bookings", "session_cancell
 export type UpdateSessionCode = (typeof UPDATE_SESSION_CODES)[number] | TransportCode
 
 export type UpdateSessionResult =
-  | { ok: true; sessionId: string; capacity: number; confirmedCount: number; changed: boolean }
+  /** `promoted`: students moved from the waitlist into the new spots (Phase 4.4); `confirmedCount` counts them. */
+  | { ok: true; sessionId: string; capacity: number; confirmedCount: number; changed: boolean; promoted: number }
   | { ok: false; code: UpdateSessionCode; confirmedCount?: number }
 
 export interface CancelSessionCommand {
@@ -421,6 +484,19 @@ export type AdjustCreditsResult =
   | { ok: true; grantId: string; delta: number; creditsRemaining: number; balance: number; replayed: boolean }
   | { ok: false; code: AdjustCreditsCode; creditsRemaining?: number }
 
+/** One waitlist entry of a session as staff see it (plain RLS read, ADR-015). Names are user-provided text. */
+export interface WaitlistRosterEntry {
+  entryId: string
+  userId: string
+  displayName: string | null
+  email: string | null
+  status: WaitlistStatus
+  skipReason: WaitlistSkipReason | null
+  /** Join order is FIFO order (ties: entry id); the application derives each place from it. */
+  joinedAt: IsoDateTime
+  resolvedAt: IsoDateTime | null
+}
+
 /** `admin_book_for`: staff books a student; bypasses the booking window, never capacity. */
 export interface BookForStudentCommand {
   userId: string
@@ -459,6 +535,8 @@ export type CancelForStudentResult =
       /** The pack had already expired: nothing went back (staff grants it by hand). */
       refundSkipped: boolean
       replayed: boolean
+      /** Students moved from the waitlist into the freed spot (Phase 4.4). */
+      promoted: number
     }
   | { ok: false; code: CancelForStudentCode }
 
@@ -489,6 +567,8 @@ export interface AdminRepository {
   getSession(id: string): Promise<AdminSessionView | null>
   /** Every booking of the session (any status), oldest first. */
   getRoster(sessionId: string): Promise<RosterEntry[]>
+  /** Every waitlist entry of the session (any status), in join order (Phase 4.4). */
+  getWaitlist(sessionId: string): Promise<WaitlistRosterEntry[]>
   markAttendance(cmd: MarkAttendanceCommand): Promise<MarkAttendanceResult>
   /** Every class type (published, draft, archived), by sort order then name. */
   listClassTypes(): Promise<AdminClassTypeView[]>

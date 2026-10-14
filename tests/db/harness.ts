@@ -57,6 +57,23 @@ export class Actor {
     return rows[0].r
   }
 
+  /** Phase 4.4: join the waitlist of a full session (one key per call unless given). */
+  async joinWaitlist(sessionId: string, key: string = randomUUID()): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.join_waitlist($1, $2) as r", [sessionId, key])
+    return rows[0].r
+  }
+
+  async leaveWaitlist(sessionId: string): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.leave_waitlist($1) as r", [sessionId])
+    return rows[0].r
+  }
+
+  /** Staff-only RPC (AD-10): cancel a student's booking (refund by default); promotes from the waitlist. */
+  async cancelFor(bookingId: string): Promise<RpcResult> {
+    const { rows } = await this.client.query<{ r: RpcResult }>("select public.admin_cancel_for($1) as r", [bookingId])
+    return rows[0].r
+  }
+
   /** Staff-only RPC (AD-05.1); a student actor gets 42501 forbidden. */
   async updateCapacity(sessionId: string, capacity: number): Promise<RpcResult> {
     const { rows } = await this.client.query<{ r: RpcResult }>("select public.admin_update_session($1, $2) as r", [
@@ -132,7 +149,10 @@ export class Admin {
     return rows[0]
   }
 
-  /** Fake local user (example.test); the auth trigger creates the student profile. */
+  /**
+   * Fake local user (example.test); the auth trigger creates the student profile. A display name is set
+   * because book_session / join_waitlist require one (profile_incomplete, owner decision 2026-10-14).
+   */
   async createUser(): Promise<string> {
     const id = randomUUID()
     await this.client.query(
@@ -142,6 +162,7 @@ export class Admin {
                '{"provider":"email","providers":["email"]}', '{}', now(), now())`,
       [id, `race-${id}@example.test`],
     )
+    await this.client.query("update public.profiles set display_name = $2 where id = $1", [id, `Race ${id.slice(0, 8)}`])
     return id
   }
 
@@ -279,3 +300,4 @@ export class Admin {
 export const LOCK_SESSION = "select 1 from public.sessions where id = $1 for update"
 export const LOCK_PROFILE = "select 1 from public.profiles where id = $1 for update"
 export const LOCK_GRANT = "select 1 from public.credit_grants where id = $1 for update"
+export const LOCK_WAITLIST_ENTRY = "select 1 from public.waitlist_entries where id = $1 for update"

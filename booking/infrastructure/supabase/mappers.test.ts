@@ -179,6 +179,7 @@ describe("row mappers", () => {
     credit_grant_id: "g1",
     created_at: "2026-10-10T12:00:00+00:00",
     refunded: false,
+    source: "student",
     session: {
       id: "s1",
       class_type_id: "ct1",

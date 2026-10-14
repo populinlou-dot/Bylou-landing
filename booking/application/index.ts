@@ -7,6 +7,13 @@ export {
   RepositoryError,
   TRANSPORT_CODES,
   UPDATE_SESSION_CODES,
+  WAITLIST_CODES,
+  type JoinWaitlistCommand,
+  type JoinWaitlistResult,
+  type LeaveWaitlistResult,
+  type MyWaitlistEntry,
+  type WaitlistCode,
+  type WaitlistRosterEntry,
   type AnonymizeStudentCode,
   type AnonymizeStudentCommand,
   type AnonymizeStudentResult,
@@ -95,17 +102,21 @@ export {
   type MyOutcome,
   type SessionState,
   type StudentAction,
+  type WaitlistContext,
 } from "./get-agenda"
 export {
   cancelBooking,
   getMyAccount,
   isValidIdempotencyKey,
+  joinWaitlist,
+  leaveWaitlist,
   reserveSession,
   type AccountDeps,
   type BookingDeps,
   type HistoryOutcome,
   type MyAccount,
   type MyBookingEntry,
+  type MyWaitlistItem,
 } from "./booking-actions"
 export {
   ADMIN_CLASS_TYPES_PATH,
@@ -131,6 +142,7 @@ export {
   getAdminSessionDetail,
   isValidLocalDate,
   markAttendance,
+  orderWaitlist,
   resolveStaffAccess,
   rosterLabel,
   toAdminDayEntry,
@@ -139,6 +151,7 @@ export {
   type AdminDeps,
   type AdminSessionDetail,
   type AdminSessionState,
+  type AdminWaitlistEntry,
   type StaffAccess,
 } from "./admin"
 export {
@@ -217,7 +230,9 @@ export {
   type AgendaFilters,
 } from "./agenda-filters"
 export {
+  BLANK_NAME,
   DISPLAY_NAME_MAX,
+  hasVisibleName,
   needsDisplayName,
   saveDisplayName,
   validateDisplayName,

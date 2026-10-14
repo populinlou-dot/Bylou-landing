@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { bylouBrand } from "../../../brands/bylou"
 import type { BookingRepository, MyBooking } from "../../application"
-import { CLASS_TYPES, availabilityAt, fakeAuth, fakeRepository, fixedClock } from "../../application/test-support"
+import { CLASS_TYPES, availabilityAt, fakeAuth, fakeRepository, fixedClock, myWaitlistEntry } from "../../application/test-support"
 import type { StudioRules } from "../../domain"
 import { BookingProvider } from "../booking-context"
 import { MyBookingsContainer } from "./my-bookings-container"
@@ -34,6 +34,7 @@ function myBooking(id: string, startsAt: string, extra: Partial<MyBooking> = {})
     classType: CLASS_TYPES[1],
     instructorName: "Lou",
     refunded: false,
+    source: "student",
     privateDetails: null,
     ...extra,
   }
@@ -142,5 +143,36 @@ describe("Mis reservas", () => {
     const history = await screen.findByRole("region", { name: "Historial" })
     expect(within(history).getByText("Asististe")).toBeTruthy()
     expect(screen.getByText("Todavía no tenés clases reservadas.")).toBeTruthy()
+  })
+})
+
+describe("Mis reservas: waitlist (Phase 4.4)", () => {
+  const FULL = availabilityAt("2026-10-18T13:00:00.000Z", { id: "s-full", capacity: 2, confirmed: 2 }).session
+
+  it("marks a booking that came from the waitlist", async () => {
+    const promoted = myBooking("b-w", "2026-10-17T13:00:00.000Z", { source: "waitlist" })
+    renderMine(fakeRepository([], { rules: BYLOU_RULES, myBookings: [promoted] }))
+    const card = (await screen.findAllByRole("article"))[0]
+    expect(within(card).getByText("¡Se liberó un lugar! Tu clase quedó reservada.")).toBeTruthy()
+  })
+
+  it("lists the classes she waits for with her place, and lets her leave", async () => {
+    const repository = fakeRepository([], {
+      rules: BYLOU_RULES,
+      waitlist: [
+        myWaitlistEntry(FULL, { entryId: "w-1", position: 2 }),
+        myWaitlistEntry(FAR.session, { entryId: "w-2", status: "skipped", skipReason: "no_valid_credit", position: null }),
+      ],
+    })
+    const leave = vi.spyOn(repository, "leaveWaitlist")
+    renderMine(repository)
+    const section = await screen.findByRole("region", { name: "Lista de espera" })
+    const cards = within(section).getAllByRole("article")
+    expect(cards).toHaveLength(2)
+    expect(within(cards[0]).getByText(/no tenías un pack vigente/)).toBeTruthy()
+    expect(within(cards[1]).getByText("Estás en la lista de espera · lugar 2")).toBeTruthy()
+    await act(async () => fireEvent.click(within(cards[1]).getByRole("button", { name: "Salir de la lista" })))
+    expect(leave).toHaveBeenCalledWith("s-full")
+    expect(await screen.findByText("Saliste de la lista de espera.")).toBeTruthy()
   })
 })

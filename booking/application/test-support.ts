@@ -15,10 +15,12 @@ import type {
   Clock,
   CreditBalance,
   MyBooking,
+  MyWaitlistEntry,
   RosterEntry,
   SessionAvailability,
   SessionPrivateDetails,
   StaffRole,
+  WaitlistRosterEntry,
 } from "./ports"
 
 export const BA_RULES: StudioRules = {
@@ -69,7 +71,6 @@ export function availabilityAt(
     instructorName: "Lou",
     myBookingId: overrides.myBookingId ?? null,
     myAttendance: overrides.myBookingId ? (overrides.myAttendance ?? "unknown") : null,
-    myWaitlistPosition: null,
   }
 }
 
@@ -97,6 +98,25 @@ export interface FakeRepositoryOptions {
   privateDetails?: Record<string, SessionPrivateDetails>
   /** `profiles.display_name` of the signed-in user (default "Alumna"). */
   displayName?: string | null
+  /** The signed-in user's waitlist entries (default none). */
+  waitlist?: MyWaitlistEntry[]
+}
+
+/** One of her waitlist entries for a session (default: waiting, 1st in line). */
+export function myWaitlistEntry(session: Session, overrides: Partial<MyWaitlistEntry> = {}): MyWaitlistEntry {
+  return {
+    entryId: `w-${session.id}`,
+    session,
+    classTypeName: "Clase grupal",
+    instructorName: "Lou",
+    status: "waiting",
+    skipReason: null,
+    position: 1,
+    bookingId: null,
+    createdAt: "2026-10-10T12:00:00.000Z",
+    resolvedAt: null,
+    ...overrides,
+  }
 }
 
 /**
@@ -154,6 +174,18 @@ export function fakeRepository(
     async updateMyDisplayName(displayName) {
       calls.push(`updateMyDisplayName ${displayName}`)
       return { ok: true, displayName }
+    },
+    async joinWaitlist(cmd) {
+      calls.push(`joinWaitlist ${cmd.sessionId} ${cmd.requestKey}`)
+      return { ok: true, entryId: `w-${cmd.sessionId}`, status: "waiting", position: 1, replayed: false }
+    },
+    async leaveWaitlist(sessionId) {
+      calls.push(`leaveWaitlist ${sessionId}`)
+      return { ok: true, status: "left", bookingId: null, replayed: false }
+    },
+    async listMyWaitlist() {
+      calls.push("listMyWaitlist")
+      return options.waitlist ?? []
     },
   }
 }
@@ -270,6 +302,21 @@ export interface FakeAdminOptions {
   grants?: Record<string, AdminGrantView[]>
   studentBookings?: Record<string, StudentBookingView[]>
   ledger?: Record<string, AdminLedgerEntry[]>
+  waitlist?: Record<string, WaitlistRosterEntry[]>
+}
+
+export function waitlistRosterEntry(id: string, overrides: Partial<WaitlistRosterEntry> = {}): WaitlistRosterEntry {
+  return {
+    entryId: id,
+    userId: `u-${id}`,
+    displayName: `Alumna ${id}`,
+    email: `${id}@example.test`,
+    status: "waiting",
+    skipReason: null,
+    joinedAt: "2026-10-10T12:00:00.000Z",
+    resolvedAt: null,
+    ...overrides,
+  }
 }
 
 /* ---------- Phase 4.3 fixtures (students + credits) ---------- */
@@ -357,6 +404,10 @@ export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminReposi
       calls.push(`getRoster ${sessionId}`)
       return options.roster?.[sessionId] ?? []
     },
+    async getWaitlist(sessionId) {
+      calls.push(`getWaitlist ${sessionId}`)
+      return options.waitlist?.[sessionId] ?? []
+    },
     async markAttendance(cmd) {
       calls.push(`markAttendance ${cmd.bookingId} ${cmd.attendance}`)
       return { ok: true, bookingId: cmd.bookingId, attendance: cmd.attendance }
@@ -376,7 +427,7 @@ export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminReposi
     async updateSessionCapacity(cmd) {
       calls.push(`updateSessionCapacity ${cmd.sessionId} ${cmd.capacity}`)
       const confirmedCount = sessions.find((s) => s.session.id === cmd.sessionId)?.confirmedCount ?? 0
-      return { ok: true, sessionId: cmd.sessionId, capacity: cmd.capacity, confirmedCount, changed: true }
+      return { ok: true, sessionId: cmd.sessionId, capacity: cmd.capacity, confirmedCount, changed: true, promoted: 0 }
     },
     async cancelSession(cmd) {
       calls.push(`cancelSession ${cmd.sessionId}`)
@@ -418,7 +469,7 @@ export function fakeAdminRepository(options: FakeAdminOptions = {}): AdminReposi
     },
     async cancelForStudent(cmd) {
       calls.push(`cancelForStudent ${cmd.bookingId} ${cmd.refund}`)
-      return { ok: true, bookingId: cmd.bookingId, refunded: cmd.refund, refundSkipped: false, replayed: false }
+      return { ok: true, bookingId: cmd.bookingId, refunded: cmd.refund, refundSkipped: false, replayed: false, promoted: 0 }
     },
     async anonymizeStudent(cmd) {
       calls.push(`anonymizeStudent ${cmd.userId} ${cmd.confirmEmail}`)

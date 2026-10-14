@@ -193,4 +193,48 @@ test.describe("Accessibility (axe + UX_DESIGN §5.2)", () => {
 
     await report(testInfo, out)
   })
+
+  test("waitlist and required-name screens (Phase 4.4)", async ({ page, t, brand }, testInfo) => {
+    const out = collected()
+    const check = (state: string) => audit(page, state, out, brand.locale)
+    const session = "demo-2026-10-19-0800-individual" // Mon 19 Oct 1:1, free in the seed
+    const signOut = async () => {
+      await page.getByRole("banner").getByRole("button", { name: t("auth.signOut"), exact: true }).click()
+      await expect(page.getByRole("heading", { level: 1, name: t("agenda.title") })).toBeVisible()
+    }
+
+    // A new student books it (required name step), which makes the class full.
+    await page.goto(`/reservas/sesion/?id=${session}`)
+    await page.getByRole("button", { name: t("session.cta"), exact: true }).click()
+    await signIn(page, t, "nueva@demo.test")
+    await expect(page.getByRole("heading", { level: 1, name: t("profile.title") })).toBeVisible()
+    await page.getByRole("button", { name: t("profile.save") }).click()
+    await expect(page.getByRole("main").getByRole("alert")).toBeVisible()
+    await check("profile-name-step-error")
+    await page.getByRole("textbox", { name: t("profile.label") }).fill("Nora")
+    await page.getByRole("button", { name: t("profile.save") }).click()
+    await page.getByRole("dialog", { name: "Clase individual" }).getByRole("button", { name: t("sheet.confirm") }).click()
+    await page.getByRole("dialog", { name: t("success.title") }).getByRole("button", { name: t("sheet.back") }).click()
+    await signOut()
+
+    await page.getByRole("button", { name: t("agenda.nextWeek") }).click()
+    await expect(page.getByRole("main").getByRole("button", { name: t("waitlist.join") }).first()).toBeVisible()
+    await check("agenda-waitlist-join")
+    await page.getByRole("main").getByRole("article").filter({ has: page.locator(`a[href$="?id=${session}"]`) }).getByRole("link").click()
+    await expect(page.getByRole("heading", { level: 1, name: "Clase individual" })).toBeVisible()
+    await expect(page.getByRole("button", { name: t("waitlist.join") })).toBeVisible()
+    await check("session-detail-waitlist-join")
+    await page.getByRole("button", { name: t("waitlist.join") }).click()
+    await signIn(page, t, STUDENT_EMAIL)
+    await expect(page.getByRole("heading", { level: 1, name: "Clase individual" })).toBeVisible()
+    await page.getByRole("button", { name: t("waitlist.join") }).click()
+    await expect(page.getByRole("button", { name: t("waitlist.leave") })).toBeVisible()
+    await check("session-detail-waiting")
+
+    await page.getByRole("banner").getByRole("link", { name: t("mine.title") }).click()
+    await expect(page.getByRole("region", { name: t("mine.waitlist") })).toBeVisible()
+    await check("my-bookings-waitlist")
+
+    await report(testInfo, out)
+  })
 })

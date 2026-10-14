@@ -177,6 +177,7 @@ describe("write envelopes", () => {
       bookingId: "b",
       refunded: false,
       refundSkipped: true,
+      promoted: 0,
       replayed: false,
     })
     expect(mapCancelForStudentRpc({ ok: false, code: "cancellation_not_allowed" })).toEqual({ ok: false, code: "cancellation_not_allowed" })

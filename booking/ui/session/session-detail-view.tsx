@@ -160,6 +160,7 @@ function SessionDetailContent({ detail, reopenSheet }: { detail: SessionDetail; 
           describedBy={status ? statusId : undefined}
           fullWidth
           autoOpen={reopenSheet}
+          waitlistHours={detail.cancellationWindowHours}
         />
       </div>
 

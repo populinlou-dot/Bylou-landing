@@ -2,13 +2,24 @@
  * Read-only agenda use cases (Phase 2, slice 2.1).
  * Availability is a client-side PREVIEW (ADR-005); the backend stays the authority.
  */
-import { evaluateBooking, toEpochMs, type Attendance, type IsoDateTime, type Modality, type Session, type StudioRules } from "../domain"
-import type { BookingRepository, ClassTypeView, Clock, SessionAvailability, SessionPrivateDetails } from "./ports"
+import {
+  evaluateBooking,
+  isWaitlistPromotionOpen,
+  toEpochMs,
+  type Attendance,
+  type IsoDateTime,
+  type Modality,
+  type Session,
+  type StudioRules,
+} from "../domain"
+import { RepositoryError, type BookingRepository, type ClassTypeView, type Clock, type SessionAvailability, type SessionPrivateDetails } from "./ports"
 import { addDays, localDateOf, startOfWeek, zonedTimeToInstant, type LocalDate } from "./time-zone"
 
 export interface AgendaDeps {
   repository: BookingRepository
   clock: Clock
+  /** Brand flag `features.waitlist` (the server enforces its own switch). Off/absent → no waitlist actions. */
+  waitlist?: boolean
 }
 
 /**
@@ -24,9 +35,22 @@ export type SessionState = "available" | "full" | "not_open" | "closed" | "in_pr
  * What the current student can do with a session:
  * - book: show "Reservar"
  * - booked: an upcoming session she already holds ("Ya tenés esta clase reservada" + Mis reservas)
+ * - join_waitlist: a full session she can wait for (waitlist on, more than the cancellation window ahead)
+ * - waiting: she is on its waitlist (place + "Salir de la lista")
  * - none: nothing to do; the card explains why (state badge / reason / outcome)
  */
-export type StudentAction = "book" | "booked" | "none"
+export type StudentAction = "book" | "booked" | "join_waitlist" | "waiting" | "none"
+
+/** Waitlist facts `studentAction` needs; all off when the brand has no waitlist. */
+export interface WaitlistContext {
+  enabled: boolean
+  /** Her 1-based place while waiting on this session; null when she is not waiting. */
+  position: number | null
+  /** A freed spot would still go to the list (owner rule: more than the cancellation window ahead). */
+  open: boolean
+}
+
+const NO_WAITLIST: WaitlistContext = { enabled: false, position: null, open: false }
 
 /** How the student's own booking of a started or ended session reads (Asististe / No asististe / Reservada). */
 export type MyOutcome = "attended" | "absent" | "booked"
@@ -46,6 +70,10 @@ export interface AgendaEntry {
   myBookingId: string | null
   /** Decided by `studentAction` (domain order); the UI renders it and never re-derives it. */
   action: StudentAction
+  /** Her place on this session's waitlist while waiting; null otherwise (and when the waitlist is off). */
+  myWaitlistPosition: number | null
+  /** Waitlist on and a freed spot would still be promoted (false inside the cancellation window). */
+  waitlistOpen: boolean
   /** Only for a started or ended session the student had booked; null otherwise. */
   myOutcome: MyOutcome | null
 }
@@ -123,6 +151,8 @@ export async function getAgendaWeek(deps: AgendaDeps, query: AgendaWeekQuery = {
 export interface SessionDetail {
   timezone: string
   now: IsoDateTime
+  /** From the studio rules: free cancellation (and waitlist promotion) stops this many hours before start. */
+  cancellationWindowHours: number
   entry: AgendaEntry
   /** Meeting link / address: only when the backend returns them (booked users, ADR-005). */
   privateDetails: SessionPrivateDetails | null
@@ -138,12 +168,22 @@ export function isValidSessionId(id: unknown): id is string {
 /** Detail for `/reservas/sesion/?id=`. Returns null for invalid or unknown ids (not-found state). */
 export async function getSessionDetail(deps: AgendaDeps, query: { id: string | null }): Promise<SessionDetail | null> {
   if (!isValidSessionId(query.id)) return null
-  const [rules, found] = await Promise.all([deps.repository.getStudioRules(), deps.repository.getSession(query.id)])
+  const [rules, found, positions] = await Promise.all([
+    deps.repository.getStudioRules(),
+    deps.repository.getSession(query.id),
+    myWaitingPositions(deps),
+  ])
   if (!found) return null
   const now = deps.clock.now()
   // Only ask for private details when the user holds a booking; RLS decides anyway.
   const privateDetails = found.myBookingId ? await deps.repository.getSessionPrivateDetails(found.session.id) : null
-  return { timezone: rules.timezone, now: now.toISOString(), entry: toAgendaEntry(found, rules, now), privateDetails }
+  return {
+    timezone: rules.timezone,
+    now: now.toISOString(),
+    cancellationWindowHours: rules.cancellationWindowHours,
+    entry: toAgendaEntry(found, rules, now, waitlistContext(deps, found, rules, now, positions)),
+    privateDetails,
+  }
 }
 
 async function buildAgenda(deps: AgendaDeps, query: AgendaQuery, rules: StudioRules): Promise<Agenda> {
@@ -152,9 +192,10 @@ async function buildAgenda(deps: AgendaDeps, query: AgendaQuery, rules: StudioRu
   if (fromMs >= toMs) throw new RangeError(`Empty agenda range: ${query.from} → ${query.to}`)
 
   const now = deps.clock.now()
-  const [classTypes, listed] = await Promise.all([
+  const [classTypes, listed, positions] = await Promise.all([
     deps.repository.listClassTypes(),
     deps.repository.listSessions({ from: query.from, to: query.to }),
+    myWaitingPositions(deps),
   ])
 
   const entries = listed
@@ -165,7 +206,7 @@ async function buildAgenda(deps: AgendaDeps, query: AgendaQuery, rules: StudioRu
     })
     .filter((item) => !query.classTypeId || item.session.classTypeId === query.classTypeId)
     .filter((item) => !query.modality || item.session.modality === query.modality)
-    .map((item) => toAgendaEntry(item, rules, now))
+    .map((item) => toAgendaEntry(item, rules, now, waitlistContext(deps, item, rules, now, positions)))
     .sort((a, b) => toEpochMs(a.session.startsAt) - toEpochMs(b.session.startsAt) || a.session.id.localeCompare(b.session.id))
 
   const byDay = new Map<LocalDate, AgendaEntry[]>()
@@ -186,7 +227,44 @@ async function buildAgenda(deps: AgendaDeps, query: AgendaQuery, rules: StudioRu
   }
 }
 
-export function toAgendaEntry(item: SessionAvailability, rules: StudioRules, now: Date): AgendaEntry {
+/**
+ * session id → her place, for the sessions she is waiting on. Off, signed out or a failed read → empty: the
+ * waitlist is extra information and must never break the agenda (a repeated join just replays her entry).
+ */
+async function myWaitingPositions(deps: AgendaDeps): Promise<ReadonlyMap<string, number>> {
+  if (!deps.waitlist) return new Map()
+  try {
+    const entries = await deps.repository.listMyWaitlist()
+    return new Map(
+      entries.flatMap((e) => (e.status === "waiting" && e.position !== null ? [[e.session.id, e.position] as const] : [])),
+    )
+  } catch (error) {
+    if (!(error instanceof RepositoryError)) console.error("[booking] waitlist load failed", error)
+    return new Map()
+  }
+}
+
+function waitlistContext(
+  deps: AgendaDeps,
+  item: SessionAvailability,
+  rules: StudioRules,
+  now: Date,
+  positions: ReadonlyMap<string, number>,
+): WaitlistContext {
+  if (!deps.waitlist) return NO_WAITLIST
+  return {
+    enabled: true,
+    position: positions.get(item.session.id) ?? null,
+    open: isWaitlistPromotionOpen(item.session, rules, now),
+  }
+}
+
+export function toAgendaEntry(
+  item: SessionAvailability,
+  rules: StudioRules,
+  now: Date,
+  waitlist: WaitlistContext = NO_WAITLIST,
+): AgendaEntry {
   const { session } = item
   const spotsLeft = Math.max(0, session.capacity - item.confirmedCount)
   const startMs = toEpochMs(session.startsAt)
@@ -203,7 +281,9 @@ export function toAgendaEntry(item: SessionAvailability, rules: StudioRules, now
     spotsLeft,
     state,
     myBookingId: item.myBookingId,
-    action: studentAction(state, item.myBookingId),
+    action: studentAction(state, item.myBookingId, waitlist),
+    myWaitlistPosition: waitlist.enabled ? waitlist.position : null,
+    waitlistOpen: waitlist.enabled && waitlist.open,
     myOutcome: myOutcome(state, item.myBookingId, item.myAttendance),
   }
 }
@@ -212,12 +292,22 @@ export function toAgendaEntry(item: SessionAvailability, rules: StudioRules, now
  * Same order as the domain policy (`evaluateBooking`): cancelled → started (in progress / past)
  * → already booked → booking window → full. A started or ended session therefore never reads
  * as "already booked", even when the student holds a confirmed booking for it.
+ * Waitlist (Phase 4.4): a free spot is always offered as "book" (also to someone still waiting inside
+ * the window); otherwise her place shows while she waits, and a full session she could wait for offers
+ * "join_waitlist" only while a freed spot would still be promoted (owner rule, ADR-011).
  */
-export function studentAction(state: SessionState, myBookingId: string | null): StudentAction {
+export function studentAction(
+  state: SessionState,
+  myBookingId: string | null,
+  waitlist: WaitlistContext = NO_WAITLIST,
+): StudentAction {
   if (state === "cancelled") return "none"
   if (state === "in_progress" || state === "past") return "none"
   if (myBookingId) return "booked"
-  return state === "available" ? "book" : "none"
+  if (state === "available") return "book"
+  if (waitlist.enabled && waitlist.position !== null) return "waiting"
+  if (waitlist.enabled && state === "full" && waitlist.open) return "join_waitlist"
+  return "none"
 }
 
 /** Outcome of the student's own booking, only once the session has started. */
@@ -234,8 +324,14 @@ export function myOutcome(state: SessionState, myBookingId: string | null, atten
  */
 export async function getAgendaEntry(deps: AgendaDeps, sessionId: string): Promise<AgendaEntry | null> {
   if (!isValidSessionId(sessionId)) return null
-  const [rules, found] = await Promise.all([deps.repository.getStudioRules(), deps.repository.getSession(sessionId)])
-  return found ? toAgendaEntry(found, rules, deps.clock.now()) : null
+  const [rules, found, positions] = await Promise.all([
+    deps.repository.getStudioRules(),
+    deps.repository.getSession(sessionId),
+    myWaitingPositions(deps),
+  ])
+  if (!found) return null
+  const now = deps.clock.now()
+  return toAgendaEntry(found, rules, now, waitlistContext(deps, found, rules, now, positions))
 }
 
 /**

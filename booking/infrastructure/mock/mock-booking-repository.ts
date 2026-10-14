@@ -6,6 +6,8 @@
  * evaluateCancellation, selectCreditGrant) and the same idempotency contract:
  * same key + same session → original booking (replayed), same key + other session → invalid_input.
  * State lives in memory only: a full page reload starts over.
+ * Phase 4.4: the waitlist (mock-waitlist) and the required display name (`profile_incomplete`) follow
+ * migration 20261014001300.
  */
 import {
   availability,
@@ -13,6 +15,7 @@ import {
   evaluateBooking,
   evaluateCancellation,
   isGrantUsableAt,
+  isWaitlistPromotionOpen,
   toEpochMs,
   type Booking,
   type CreditGrant,
@@ -22,6 +25,7 @@ import {
 } from "../../domain"
 import {
   RepositoryError,
+  hasVisibleName,
   localDateOf,
   startOfWeek,
   zonedTimeToInstant,
@@ -35,15 +39,27 @@ import {
   type Clock,
   type CreditBalance,
   type InstantRange,
+  type JoinWaitlistCommand,
+  type JoinWaitlistResult,
+  type LeaveWaitlistResult,
   type MyBooking,
   type MyProfile,
+  type MyWaitlistEntry,
   type SessionAvailability,
   type SessionPrivateDetails,
   type UpdateProfileResult,
 } from "../../application"
-import { DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
+import { DEMO_NEW_STUDENT_ID, DEMO_STAFF_ID, DEMO_USER_ID } from "./mock-auth"
 import { createDemoSeed, type DemoSeed } from "./demo-seed"
 import { appendLedger, expireDueGrants, type MockGrantMeta, type MockLedgerEntry } from "./mock-ledger"
+import {
+  closeWaiting,
+  nextWaitlistId,
+  promoteFromWaitlist,
+  resolveEntry,
+  waitlistPosition,
+  type MockWaitlistEntry,
+} from "./mock-waitlist"
 
 export interface MockBookingRepositoryOptions {
   clock: Clock
@@ -55,6 +71,8 @@ export interface MockBookingRepositoryOptions {
   currentUserId?: () => string | null
   /** Churn throttle (ADR-019); defaults mirror `studio_settings`. */
   throttle?: MockThrottle
+  /** Brand flag `features.waitlist`, standing in for `studio_settings.waitlist_enabled` (off by default). */
+  waitlistEnabled?: boolean
 }
 
 /** Rolling 24 h limits of book_session (null = off). */
@@ -65,6 +83,10 @@ export interface MockThrottle {
 
 /** Same defaults as the migration (studio_settings.max_self_cancellations_24h / max_session_bookings_24h). */
 export const MOCK_THROTTLE_DEFAULTS: MockThrottle = { maxSelfCancellations24h: 6, maxSessionBookings24h: 3 }
+
+/** join_waitlist caps (migration 20261014001300): waiting entries per session, open entries per student. */
+const WAITLIST_MAX_PER_SESSION = 50
+const WAITLIST_MAX_PER_STUDENT = 10
 
 const DAY_MS = 24 * 60 * 60_000
 /** Fictional attendee details, shown only to the demo student holding a booking. */
@@ -103,6 +125,8 @@ interface MockState extends DemoSeed {
   anonymizedAt: Record<string, IsoDateTime>
   /** Instants of cancellations a student made herself (bookings.cancelled_by = user), for the throttle. */
   selfCancellations: { userId: string; at: IsoDateTime }[]
+  /** waitlist_entries (Phase 4.4). */
+  waitlist: MockWaitlistEntry[]
 }
 
 /** The live in-memory studio shared with MockAdminRepository (mock only). */
@@ -123,7 +147,9 @@ export type MockStudio = Pick<
   | "bookingSources"
   | "displayNames"
   | "anonymizedAt"
-> & { rules: StudioRules }
+  | "waitlist"
+  | "selfCancellations"
+> & { rules: StudioRules; waitlistEnabled: boolean; throttle: MockThrottle }
 
 /** Demo defaults for the seeded class types (all published). */
 const DEMO_CLASS_TYPE_MODALITY: Record<string, Modality> = {
@@ -178,7 +204,7 @@ export class MockBookingRepository implements BookingRepository {
   async listMyBookings(): Promise<MyBooking[]> {
     await this.delay()
     const userId = this.requireUser()
-    const { bookings, sessions, classTypes, instructorBySessionId, refunded } = this.data()
+    const { bookings, sessions, classTypes, instructorBySessionId, refunded, bookingSources } = this.data()
     return bookings
       .filter((b) => b.userId === userId)
       .flatMap((booking): MyBooking[] => {
@@ -192,6 +218,7 @@ export class MockBookingRepository implements BookingRepository {
             classType,
             instructorName: instructorBySessionId[session.id] ?? null,
             refunded: refunded.has(booking.id),
+            source: bookingSources[booking.id] ?? "student",
             privateDetails: booking.status === "confirmed" ? this.privateDetailsOf(session) : null,
           }),
         ]
@@ -218,6 +245,8 @@ export class MockBookingRepository implements BookingRepository {
     }
     // An anonymized profile cannot book (book_session raises 42501).
     if (state.anonymizedAt[userId]) return { ok: false, code: "forbidden" }
+    // A display name is required before booking (owner decision 2026-10-14).
+    if (!hasVisibleName(state.displayNames[userId])) return { ok: false, code: "profile_incomplete" }
 
     const session = state.sessions.find((s) => s.id === cmd.sessionId)
     // Sessions of an archived class type are not bookable (book_session → not_found).
@@ -260,6 +289,8 @@ export class MockBookingRepository implements BookingRepository {
       actorId: userId,
       createdAt: booking.createdAt,
     })
+    // Booking directly closes her own waiting entry of this class.
+    closeWaiting(state.waitlist, (e) => e.sessionId === session.id && e.userId === userId, "booked", this.options.clock.now())
     return { ok: true, bookingId: booking.id, replayed: false, remainingCredits: this.balanceOf(userId).available }
   }
 
@@ -304,7 +335,126 @@ export class MockBookingRepository implements BookingRepository {
         })
       }
     }
+    // The freed spot goes to the first eligible waiting student, in the same step (cancel_booking).
+    promoteFromWaitlist(this.sharedState(), session.id, now)
     return { ok: true, bookingId: booking.id, status: booking.status, refunded, replayed: false }
+  }
+
+  /** Mirrors join_waitlist (same check order, same codes). */
+  async joinWaitlist(cmd: JoinWaitlistCommand): Promise<JoinWaitlistResult> {
+    await this.delay()
+    const userId = this.userId()
+    if (!userId) return { ok: false, code: "unauthenticated" }
+    const state = this.data()
+    const now = this.options.clock.now()
+    const prior = state.waitlist.find((e) => e.userId === userId && e.requestKey === cmd.requestKey)
+    if (prior) {
+      if (prior.sessionId !== cmd.sessionId) return { ok: false, code: "invalid_input" }
+      return this.joinAnswer(prior, true)
+    }
+    if (state.anonymizedAt[userId]) return { ok: false, code: "forbidden" }
+    if (!hasVisibleName(state.displayNames[userId])) return { ok: false, code: "profile_incomplete" }
+    if (!this.options.waitlistEnabled) return { ok: false, code: "waitlist_disabled" }
+    const session = state.sessions.find((s) => s.id === cmd.sessionId)
+    if (!session || !this.isPublishedType(session.classTypeId)) return { ok: false, code: "not_found" }
+    const decision = evaluateBooking({
+      session,
+      userId,
+      sessionBookings: state.bookings.filter((b) => b.sessionId === session.id),
+      grants: [],
+      rules: this.options.rules,
+      now,
+    })
+    // Same order as the RPC: state and booking window first, then the cancellation-window rule.
+    if (!decision.ok && ["session_cancelled", "session_started", "booking_not_open", "booking_closed"].includes(decision.code)) {
+      return { ok: false, code: decision.code as "session_cancelled" | "session_started" | "booking_not_open" | "booking_closed" }
+    }
+    if (!isWaitlistPromotionOpen(session, this.options.rules, now)) return { ok: false, code: "waitlist_closed" }
+    if (this.myConfirmedBooking(session.id, userId)) return { ok: false, code: "already_booked" }
+    const waiting = state.waitlist.find((e) => e.sessionId === session.id && e.userId === userId && e.status === "waiting")
+    if (waiting) return this.joinAnswer(waiting, true)
+    if (!availability(session, state.bookings).isFull) return { ok: false, code: "session_not_full" }
+    if (state.waitlist.filter((e) => e.sessionId === session.id && e.status === "waiting").length >= WAITLIST_MAX_PER_SESSION) {
+      return { ok: false, code: "waitlist_full" }
+    }
+    const openEntries = state.waitlist.filter((e) => {
+      const s = state.sessions.find((x) => x.id === e.sessionId)
+      return e.userId === userId && e.status === "waiting" && s !== undefined && toEpochMs(s.startsAt) > now.getTime()
+    }).length
+    if (openEntries >= WAITLIST_MAX_PER_STUDENT) return { ok: false, code: "too_many_waitlists" }
+    const limits = this.options.throttle ?? MOCK_THROTTLE_DEFAULTS
+    const since = now.getTime() - DAY_MS
+    const recentCancellations = state.selfCancellations.filter((c) => c.userId === userId && toEpochMs(c.at) > since).length
+    if (limits.maxSelfCancellations24h !== null && recentCancellations >= limits.maxSelfCancellations24h) {
+      return { ok: false, code: "too_many_changes" }
+    }
+    const recentJoins = state.waitlist.filter(
+      (e) => e.userId === userId && e.sessionId === session.id && toEpochMs(e.createdAt) > since,
+    ).length
+    if (limits.maxSessionBookings24h !== null && recentJoins >= limits.maxSessionBookings24h) {
+      return { ok: false, code: "too_many_changes" }
+    }
+    const entry: MockWaitlistEntry = {
+      id: nextWaitlistId(state.waitlist),
+      sessionId: session.id,
+      userId,
+      status: "waiting",
+      createdAt: now.toISOString(),
+      requestKey: cmd.requestKey,
+      skipReason: null,
+      closeReason: null,
+      bookingId: null,
+      resolvedAt: null,
+    }
+    state.waitlist.push(entry)
+    return this.joinAnswer(entry, false)
+  }
+
+  /** Mirrors leave_waitlist: state-idempotent, answers the latest status when she is no longer waiting. */
+  async leaveWaitlist(sessionId: string): Promise<LeaveWaitlistResult> {
+    await this.delay()
+    const userId = this.userId()
+    if (!userId) return { ok: false, code: "unauthenticated" }
+    if (!this.options.waitlistEnabled) return { ok: false, code: "waitlist_disabled" }
+    const state = this.data()
+    if (!state.sessions.some((s) => s.id === sessionId)) return { ok: false, code: "not_found" }
+    const mine = state.waitlist.filter((e) => e.sessionId === sessionId && e.userId === userId)
+    const waiting = mine.find((e) => e.status === "waiting")
+    if (waiting) {
+      resolveEntry(waiting, this.options.clock.now(), { status: "left" })
+      return { ok: true, status: "left", bookingId: null, replayed: false }
+    }
+    const latest = mine[mine.length - 1]
+    if (!latest) return { ok: false, code: "not_found" }
+    return { ok: true, status: latest.status, bookingId: latest.bookingId, replayed: true }
+  }
+
+  async listMyWaitlist(): Promise<MyWaitlistEntry[]> {
+    await this.delay()
+    const userId = this.requireUser()
+    if (!this.options.waitlistEnabled) return []
+    const { waitlist, sessions, classTypes, instructorBySessionId } = this.data()
+    return waitlist
+      .filter((e) => e.userId === userId)
+      .reverse()
+      .flatMap((entry): MyWaitlistEntry[] => {
+        const session = sessions.find((s) => s.id === entry.sessionId)
+        if (!session) return []
+        return [
+          structuredClone({
+            entryId: entry.id,
+            session,
+            classTypeName: classTypes.find((ct) => ct.id === session.classTypeId)?.name ?? "—",
+            instructorName: instructorBySessionId[session.id] ?? null,
+            status: entry.status,
+            skipReason: entry.skipReason,
+            position: waitlistPosition(waitlist, entry),
+            bookingId: entry.bookingId,
+            createdAt: entry.createdAt,
+            resolvedAt: entry.resolvedAt,
+          }),
+        ]
+      })
   }
 
   async getMyProfile(): Promise<MyProfile> {
@@ -346,6 +496,10 @@ export class MockBookingRepository implements BookingRepository {
       bookingSources: state.bookingSources,
       displayNames: state.displayNames,
       anonymizedAt: state.anonymizedAt,
+      waitlist: state.waitlist,
+      selfCancellations: state.selfCancellations,
+      throttle: this.options.throttle ?? MOCK_THROTTLE_DEFAULTS,
+      waitlistEnabled: this.options.waitlistEnabled ?? false,
       rules: this.options.rules,
     }
   }
@@ -400,6 +554,16 @@ export class MockBookingRepository implements BookingRepository {
       grantedAt: new Date(now.getTime() - 70 * DAY_MS).toISOString(),
       expiresAt: new Date(now.getTime() - 40 * DAY_MS).toISOString(),
     }
+    // A second demo student ("nueva@…", MockAuth) with a pack and no name yet: she shows the required
+    // name step, and with two students the waitlist journey can be played in one browser tab.
+    const newStudentGrant: CreditGrant = {
+      id: "demo-grant-nueva",
+      userId: DEMO_NEW_STUDENT_ID,
+      total: 4,
+      remaining: 4,
+      grantedAt: new Date(now.getTime() - 2 * DAY_MS).toISOString(),
+      expiresAt: new Date(now.getTime() + 30 * DAY_MS).toISOString(),
+    }
     // The demo pack's ledger adds up to its remaining credits (8 granted, 1 used).
     const ledger: MockLedgerEntry[] = []
     appendLedger(ledger, {
@@ -430,6 +594,15 @@ export class MockBookingRepository implements BookingRepository {
       note: past ? null : "Clase tomada antes de usar la app (demo)",
       createdAt: past ? new Date(toEpochMs(past.startsAt) - 2 * DAY_MS).toISOString() : grant.grantedAt,
     })
+    appendLedger(ledger, {
+      userId: DEMO_NEW_STUDENT_ID,
+      grantId: newStudentGrant.id,
+      reason: "grant",
+      delta: newStudentGrant.total,
+      actorId: DEMO_STAFF_ID,
+      note: "Pack 4 (demo)",
+      createdAt: newStudentGrant.grantedAt,
+    })
     const classTypeSettings = Object.fromEntries(
       seed.classTypes.map((ct, index): [string, MockClassTypeSettings] => [
         ct.id,
@@ -438,7 +611,7 @@ export class MockBookingRepository implements BookingRepository {
     )
     return {
       ...seed,
-      grants: [expiredGrant, grant],
+      grants: [expiredGrant, grant, newStudentGrant],
       keys: new Map(),
       refunded: new Set(),
       classTypeSettings,
@@ -453,12 +626,19 @@ export class MockBookingRepository implements BookingRepository {
           requestKey: "demo-grant-key-0",
         },
         [grant.id]: { note: "Pack demo", createdAt: grant.grantedAt, grantedBy: DEMO_STAFF_ID, requestKey: "demo-grant-key" },
+        [newStudentGrant.id]: {
+          note: "Pack 4 (demo)",
+          createdAt: newStudentGrant.grantedAt,
+          grantedBy: DEMO_STAFF_ID,
+          requestKey: "demo-grant-key-nueva",
+        },
       },
       bookingSources: {},
       // The demo identities already have names, matching the /admin/ demo roster.
       displayNames: { [DEMO_USER_ID]: "Alumna demo", [DEMO_STAFF_ID]: "Lou (demo)" },
       anonymizedAt: {},
       selfCancellations: [],
+      waitlist: [],
     }
   }
 
@@ -474,7 +654,8 @@ export class MockBookingRepository implements BookingRepository {
     }
     if (limits.maxSessionBookings24h !== null) {
       const rebookings = state.bookings.filter(
-        (b) => b.userId === userId && b.sessionId === sessionId && recent(b.createdAt) && (state.bookingSources[b.id] ?? "student") !== "staff",
+        // Staff bookings and waitlist promotions are not hers to count (migration 20261014001300).
+        (b) => b.userId === userId && b.sessionId === sessionId && recent(b.createdAt) && (state.bookingSources[b.id] ?? "student") === "student",
       ).length
       if (rebookings >= limits.maxSessionBookings24h) return true
     }
@@ -542,8 +723,11 @@ export class MockBookingRepository implements BookingRepository {
       instructorName: instructorBySessionId[id] ?? null,
       myBookingId: mine?.id ?? null,
       myAttendance: mine ? mine.attendance : null,
-      myWaitlistPosition: null,
     })
+  }
+
+  private joinAnswer(entry: MockWaitlistEntry, replayed: boolean): JoinWaitlistResult {
+    return { ok: true, entryId: entry.id, status: entry.status, position: waitlistPosition(this.data().waitlist, entry), replayed }
   }
 
   private delay(): Promise<void> {

@@ -15,6 +15,7 @@ import {
   type MarkAttendanceCommand,
   type MarkAttendanceResult,
   type RosterEntry,
+  type WaitlistRosterEntry,
 } from "./ports"
 import { addDays, localDateOf, zonedTimeToInstant, type LocalDate } from "./time-zone"
 
@@ -23,6 +24,8 @@ export interface AdminDeps {
   /** Studio rules (timezone) come from the same source the student agenda uses. */
   repository: Pick<BookingRepository, "getStudioRules">
   clock: Clock
+  /** Brand flag `features.waitlist`: off → the roster neither reads nor shows a waitlist. */
+  waitlist?: boolean
 }
 
 /* ---------- Staff guard ---------- */
@@ -124,12 +127,33 @@ export async function getAdminDay(deps: AdminDeps, query: { date?: string | null
 
 /* ---------- Roster ---------- */
 
+/** A staff waitlist row with its place (FIFO by join time, ties by entry id) while waiting. */
+export interface AdminWaitlistEntry extends WaitlistRosterEntry {
+  position: number | null
+}
+
 export interface AdminSessionDetail {
   timezone: string
   now: IsoDateTime
   entry: AdminDayEntry
   /** Confirmed first (by name), then cancelled ones (most recent booking first). */
   roster: RosterEntry[]
+  /** Waiting entries in queue order, then resolved ones (most recent first). Empty when the waitlist is off. */
+  waitlist: AdminWaitlistEntry[]
+  /** Students still waiting. */
+  waitingCount: number
+}
+
+const byJoinOrder = (a: WaitlistRosterEntry, b: WaitlistRosterEntry) =>
+  toEpochMs(a.joinedAt) - toEpochMs(b.joinedAt) || (a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0)
+
+/** Waiting first with their 1-based place (same order the server promotes in), then the rest, latest first. */
+export function orderWaitlist(entries: readonly WaitlistRosterEntry[]): AdminWaitlistEntry[] {
+  const waiting = entries.filter((e) => e.status === "waiting").sort(byJoinOrder)
+  const resolved = entries
+    .filter((e) => e.status !== "waiting")
+    .sort((a, b) => toEpochMs(b.resolvedAt ?? b.joinedAt) - toEpochMs(a.resolvedAt ?? a.joinedAt) || byJoinOrder(a, b))
+  return [...waiting.map((e, i) => ({ ...e, position: i + 1 })), ...resolved.map((e) => ({ ...e, position: null }))]
 }
 
 /** Display label for a roster row: name, else email, else null (the UI shows a neutral label). */
@@ -156,13 +180,19 @@ export async function getAdminSessionDetail(deps: AdminDeps, query: { id: string
   if (!isValidSessionId(query.id)) return null
   const [rules, view] = await Promise.all([deps.repository.getStudioRules(), deps.admin.getSession(query.id)])
   if (!view) return null
-  const roster = await deps.admin.getRoster(view.session.id)
+  const [roster, waitlist] = await Promise.all([
+    deps.admin.getRoster(view.session.id),
+    deps.waitlist ? deps.admin.getWaitlist(view.session.id) : Promise.resolve([]),
+  ])
   const now = deps.clock.now()
+  const ordered = orderWaitlist(waitlist)
   return {
     timezone: rules.timezone,
     now: now.toISOString(),
     entry: toAdminDayEntry(view, rules.timezone, now),
     roster: [...roster].sort(compareRoster),
+    waitlist: ordered,
+    waitingCount: ordered.filter((e) => e.status === "waiting").length,
   }
 }
 

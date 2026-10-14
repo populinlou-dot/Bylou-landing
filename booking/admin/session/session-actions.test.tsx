@@ -75,7 +75,7 @@ describe("Capacity edit (AD-05.1)", () => {
     expect(pending.disabled).toBe(true)
     // Not optimistic: occupancy still shows the old capacity.
     expect(screen.getByText("3 de 8 lugares ocupados")).toBeTruthy()
-    resolve({ ok: true, sessionId: "s-future", capacity: 5, confirmedCount: 3, changed: true })
+    resolve({ ok: true, sessionId: "s-future", capacity: 5, confirmedCount: 3, changed: true, promoted: 0 })
     expect(await screen.findByText("Cupo actualizado.")).toBeTruthy()
     expect(screen.getByText("3 de 5 lugares ocupados")).toBeTruthy()
     expect(spy).toHaveBeenCalledWith({ sessionId: "s-future", capacity: 5 })

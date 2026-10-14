@@ -4,7 +4,7 @@
  * `create_session`, `admin_upsert_class_type`, `admin_update_session`, `admin_cancel_session`;
  * migrations 20261014000700 and 20261014000900). Unknown shapes or codes become "unknown".
  */
-import type { Booking, Modality } from "../../domain"
+import type { Booking, Modality, WaitlistSkipReason, WaitlistStatus } from "../../domain"
 import {
   UPDATE_SESSION_CODES,
   type AdminClassTypeView,
@@ -19,6 +19,7 @@ import {
   type StaffRole,
   type UpdateSessionCode,
   type UpdateSessionResult,
+  type WaitlistRosterEntry,
 } from "../../application"
 import { iso } from "./mappers"
 
@@ -42,6 +43,17 @@ export interface RosterRow {
   status: Booking["status"]
   attendance: Booking["attendance"]
   created_at: string
+  profile: { display_name: string | null; email: string | null } | null
+}
+
+/** One `waitlist_entries` row with the student's profile (FK hint waitlist_entries_user_id_fkey). */
+export interface WaitlistRow {
+  id: string
+  user_id: string
+  status: WaitlistStatus
+  skip_reason: WaitlistSkipReason | null
+  created_at: string
+  resolved_at: string | null
   profile: { display_name: string | null; email: string | null } | null
 }
 
@@ -85,6 +97,20 @@ export function toRosterEntry(row: RosterRow): RosterEntry {
     status: row.status,
     attendance: row.attendance,
     bookedAt: iso(row.created_at),
+  }
+}
+
+/** Waitlist row → staff view (Phase 4.4). Names stay raw text (React escapes them). */
+export function toWaitlistRosterEntry(row: WaitlistRow): WaitlistRosterEntry {
+  return {
+    entryId: row.id,
+    userId: row.user_id,
+    displayName: row.profile?.display_name ?? null,
+    email: row.profile?.email ?? null,
+    status: row.status,
+    skipReason: row.skip_reason,
+    joinedAt: iso(row.created_at),
+    resolvedAt: row.resolved_at ? iso(row.resolved_at) : null,
   }
 }
 
@@ -163,6 +189,7 @@ export function mapUpdateSessionRpc(data: unknown): UpdateSessionResult {
       capacity: data.capacity,
       confirmedCount: data.confirmed_count,
       changed: data.changed === true,
+      promoted: isCount(data.promoted) ? data.promoted : 0,
     }
   }
   if (data.ok === false && typeof data.code === "string" && UPDATE_CODES.includes(data.code)) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertCircle, CalendarClock, CalendarHeart, LogIn, RotateCw, UserRound } from "lucide-react"
+import { AlertCircle, CalendarClock, CalendarHeart, Hourglass, LogIn, RotateCw, Sparkles, UserRound } from "lucide-react"
 import Link from "next/link"
 import { useId } from "react"
 import {
@@ -11,6 +11,7 @@ import {
   type HistoryOutcome,
   type MyAccount,
   type MyBookingEntry,
+  type MyWaitlistItem,
 } from "../../application"
 import { useBooking, useCopy, type Translate } from "../booking-context"
 import { ContactLink } from "../contact"
@@ -27,14 +28,32 @@ export type MyBookingsLoadState =
 
 export interface MyBookingsViewProps {
   load: MyBookingsLoadState
-  /** Polite confirmation after a cancellation (toast). */
+  /** Polite confirmation after a cancellation or leaving a waitlist (toast). */
   notice: string | null
   onRetry: () => void
   onCancel: (item: MyBookingEntry) => void
+  /** Waitlist entry being left (its button is busy). */
+  leaving?: string | null
+  leaveError?: { entryId: string; message: string } | null
+  onLeave?: (item: MyWaitlistItem) => void
+}
+
+interface WaitlistProps {
+  leaving: string | null
+  leaveError: { entryId: string; message: string } | null
+  onLeave: (item: MyWaitlistItem) => void
 }
 
 /** S5 "Mis reservas": pack balance, upcoming (with cancel rules) and history. */
-export function MyBookingsView({ load, notice, onRetry, onCancel }: MyBookingsViewProps) {
+export function MyBookingsView({
+  load,
+  notice,
+  onRetry,
+  onCancel,
+  leaving = null,
+  leaveError = null,
+  onLeave = () => {},
+}: MyBookingsViewProps) {
   const t = useCopy()
 
   return (
@@ -82,15 +101,26 @@ export function MyBookingsView({ load, notice, onRetry, onCancel }: MyBookingsVi
         />
       ) : null}
 
-      {load.status === "ready" ? <AccountContent account={load.account} onCancel={onCancel} /> : null}
+      {load.status === "ready" ? (
+        <AccountContent account={load.account} onCancel={onCancel} waitlist={{ leaving, leaveError, onLeave }} />
+      ) : null}
     </div>
   )
 }
 
-function AccountContent({ account, onCancel }: { account: MyAccount; onCancel: (item: MyBookingEntry) => void }) {
+function AccountContent({
+  account,
+  onCancel,
+  waitlist,
+}: {
+  account: MyAccount
+  onCancel: (item: MyBookingEntry) => void
+  waitlist: WaitlistProps
+}) {
   const t = useCopy()
   const upcomingId = useId()
   const historyId = useId()
+  const waitlistId = useId()
   return (
     <>
       <PackSummary account={account} />
@@ -119,6 +149,21 @@ function AccountContent({ account, onCancel }: { account: MyAccount; onCancel: (
           </ul>
         )}
       </section>
+
+      {account.waitlist.length > 0 ? (
+        <section aria-labelledby={waitlistId} className="flex flex-col gap-3">
+          <h2 id={waitlistId} className="text-[17px] font-bold text-foreground">
+            {t("mine.waitlist")}
+          </h2>
+          <ul role="list" className="flex flex-col gap-3">
+            {account.waitlist.map((item) => (
+              <li key={item.entryId}>
+                <WaitlistCard item={item} account={account} {...waitlist} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {account.history.length > 0 ? (
         <section aria-labelledby={historyId} className="flex flex-col gap-3">
@@ -231,9 +276,88 @@ function BookingCard({
         ) : null}
       </ul>
 
+      {item.historyOutcome === null && item.source === "waitlist" ? (
+        <p className="flex items-start gap-2 text-[14.5px] font-semibold text-[color:var(--success)]">
+          <Sparkles aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          {t("waitlist.promoted")}
+        </p>
+      ) : null}
+
       {item.privateDetails ? <PrivateDetails details={item.privateDetails} /> : null}
 
       {item.historyOutcome === null ? <CancelArea item={item} account={account} onCancel={onCancel} /> : null}
+    </article>
+  )
+}
+
+/**
+ * A class she is waiting for (place + "Salir de la lista"), or one she was passed over for because she had
+ * no valid pack when the spot opened (she may join again). Promotions appear as bookings above.
+ */
+function WaitlistCard({ item, account, leaving, leaveError, onLeave }: { item: MyWaitlistItem; account: MyAccount } & WaitlistProps) {
+  const { brand } = useBooking()
+  const t = useCopy()
+  const titleId = useId()
+  const errorId = useId()
+  const tz = account.timezone
+  const waiting = item.status === "waiting"
+  const busy = leaving === item.entryId
+  const error = leaveError?.entryId === item.entryId ? leaveError.message : null
+
+  return (
+    <article
+      aria-labelledby={titleId}
+      className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-border bg-card p-5 [box-shadow:var(--shadow-card)]"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-start gap-2 text-[15px] font-semibold text-foreground">
+          <CalendarClock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+          <time dateTime={item.session.startsAt}>
+            {formatDayHeading(item.localDate, brand.locale)} · {formatTime(item.session.startsAt, tz, brand.locale)}
+          </time>
+        </p>
+        <Badge tone="neutral">{t("mine.waitlist")}</Badge>
+      </div>
+      <h3 id={titleId} className="[font-family:var(--font-display)] text-[21px] font-medium leading-tight text-foreground">
+        {item.classTypeName}
+      </h3>
+      {waiting && item.position !== null ? (
+        <p className="flex items-center gap-1.5 text-[14.5px] font-semibold text-foreground">
+          <Hourglass aria-hidden="true" className="size-4 shrink-0 text-primary" />
+          {t("waitlist.joined", { n: item.position })}
+        </p>
+      ) : null}
+      {waiting && !item.promotionOpen ? (
+        <p className="text-[14px] text-muted-foreground">{t("waitlist.closedHint", { h: account.rules.cancellationWindowHours })}</p>
+      ) : null}
+      {item.status === "skipped" ? (
+        <p className="text-[14.5px] text-foreground">
+          {item.skipReason === "no_valid_credit" ? t("waitlist.skipped") : t("waitlist.skippedOther")}
+        </p>
+      ) : null}
+      {waiting ? (
+        <div className="flex flex-col items-start gap-1 border-t border-border pt-3">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.focus()
+              onLeave(item)
+            }}
+            disabled={busy}
+            aria-busy={busy}
+            aria-describedby={error ? errorId : undefined}
+            className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70"
+          >
+            {busy ? t("waitlist.leaving") : t("waitlist.leave")}
+          </button>
+          {error ? (
+            <p id={errorId} role="alert" className="flex items-start gap-2 text-[14.5px] font-semibold text-foreground">
+              <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   )
 }

@@ -2,7 +2,14 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { bylouBrand } from "../../../brands/bylou"
 import type { MarkAttendanceResult } from "../../application"
-import { TEST_USER, adminSessionAt, fakeAdminRepository, fakeAuth, rosterEntry } from "../../application/test-support"
+import {
+  TEST_USER,
+  adminSessionAt,
+  fakeAdminRepository,
+  fakeAuth,
+  rosterEntry,
+  waitlistRosterEntry,
+} from "../../application/test-support"
 import { renderAdmin } from "../test-support"
 import { AdminSessionContainer } from "./admin-session-container"
 
@@ -132,5 +139,40 @@ describe("Admin attendance (AD-07: never optimistic)", () => {
     within(row)
       .getAllByRole("button")
       .forEach((b) => expect((b as HTMLButtonElement).disabled).toBe(true))
+  })
+})
+
+describe("Admin roster: waitlist (Phase 4.4, AD-06)", () => {
+  it("shows the waiting count and the list in promotion order, names as plain text", async () => {
+    const admin = fakeAdminRepository({
+      sessions: [FUTURE],
+      roster: ROSTER,
+      waitlist: {
+        "s-future": [
+          waitlistRosterEntry("w-2", { displayName: "Beti", joinedAt: "2026-10-12T00:00:00.000Z" }),
+          waitlistRosterEntry("w-1", { displayName: XSS, joinedAt: "2026-10-11T00:00:00.000Z" }),
+          waitlistRosterEntry("w-0", {
+            displayName: "Caro",
+            status: "skipped",
+            skipReason: "no_valid_credit",
+            joinedAt: "2026-10-10T00:00:00.000Z",
+            resolvedAt: "2026-10-13T00:00:00.000Z",
+          }),
+        ],
+      },
+    })
+    const { container } = renderAdmin(<AdminSessionContainer id="s-future" />, { brand: bylouBrand, admin, auth: fakeAuth(TEST_USER) })
+    const section = await screen.findByRole("region", { name: "Lista de espera" })
+    expect(screen.getAllByText("2 alumnas en espera").length).toBeGreaterThan(0)
+    const rows = within(section).getAllByRole("listitem")
+    expect(rows.map((r) => r.textContent)).toEqual([`${XSS}Lugar 1`, "BetiLugar 2", "CaroSalteada: sin pack vigente"])
+    expect(container.querySelector("script")).toBeNull()
+  })
+
+  it("says so when nobody is waiting", async () => {
+    const admin = fakeAdminRepository({ sessions: [FUTURE], roster: ROSTER })
+    renderAdmin(<AdminSessionContainer id="s-future" />, { brand: bylouBrand, admin, auth: fakeAuth(TEST_USER) })
+    const section = await screen.findByRole("region", { name: "Lista de espera" })
+    expect(within(section).getByText("Nadie en lista de espera.")).toBeTruthy()
   })
 })

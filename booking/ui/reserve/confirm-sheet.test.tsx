@@ -141,3 +141,37 @@ describe("Confirm sheet", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 })
+
+describe("Confirm sheet: required display name (owner decision 2026-10-14)", () => {
+  it("asks for the name inside the sheet before the confirm button appears, then books", async () => {
+    const repository = fakeRepository([item], { displayName: null })
+    const update = vi.spyOn(repository, "updateMyDisplayName")
+    const book = vi.spyOn(repository, "book")
+    renderAction(repository)
+    fireEvent.click(screen.getByRole("button", { name: "Reservar" }))
+    const dialog = await screen.findByRole("dialog", { name: "Clase grupal" })
+    expect(await within(dialog).findByText("Antes de reservar, contanos cómo te llamás.")).toBeTruthy()
+    expect(within(dialog).queryByRole("button", { name: "Confirmar reserva" })).toBeNull()
+    expect(within(dialog).queryByRole("button", { name: "Ahora no" })).toBeNull()
+
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" })))
+    expect(within(dialog).getByRole("alert").textContent).toBe("Escribí tu nombre para seguir.")
+    fireEvent.change(within(dialog).getByLabelText("Tu nombre"), { target: { value: "Ana" } })
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Guardar" })))
+    expect(update).toHaveBeenCalledWith("Ana")
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Confirmar reserva" })))
+    expect(book).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole("dialog", { name: "¡Listo! Tu clase quedó reservada." })).toBeTruthy()
+  })
+
+  it("brings the name form back when the server answers profile_incomplete", async () => {
+    const repository = fakeRepository([item])
+    vi.spyOn(repository, "book").mockResolvedValueOnce({ ok: false, code: "profile_incomplete" })
+    renderAction(repository)
+    fireEvent.click(screen.getByRole("button", { name: "Reservar" }))
+    const dialog = await screen.findByRole("dialog", { name: "Clase grupal" })
+    await act(async () => fireEvent.click(await within(dialog).findByRole("button", { name: "Confirmar reserva" })))
+    expect(within(dialog).getByLabelText("Tu nombre")).toBeTruthy()
+    expect(within(dialog).queryByRole("button", { name: "Confirmar reserva" })).toBeNull()
+  })
+})

@@ -95,7 +95,7 @@ Credits in Phase 3 are granted by SQL/seed (no admin UI yet) so booking can debi
 | 4.1 Admin shell + Hoy | `/admin/` layout, staff guard UX, today view, roster, attendance (AD-01, AD-06, AD-07) | 3.x | SQL: admin RPCs `forbidden` for students; attendance editable ≤7 days |
 | 4.2 Sessions | Class types, single + weekly-recurring creation, capacity edit, cancel session with refunds (AD-02…AD-05) | 4.1 | SQL: capacity ≥ confirmed; session cancel refunds all, once |
 | 4.3 Students + credits | Student search, grant pack, `admin_adjust` with reason, ledger view, book/cancel on behalf (AD-08…AD-10) | 4.1 | Ledger append-only (no UPDATE/DELETE grants); balance = ledger sum |
-| 4.4 Waitlist [FLAG] | Join/leave/position, auto-promotion inside `cancel_booking` and capacity increase (ST-12) | 4.2, 🔒 ADR-011 promotion rule confirmed | SQL: FIFO, skip ineligible, promotion debits once; flag off hides all UI |
+| 4.4 Waitlist [FLAG] ✅ | Join/leave/position, auto-promotion inside `cancel_booking`, `admin_cancel_for` and capacity increase (ST-12); required display name (ADR-022) | 4.2, ADR-011 promotion rule confirmed 2026-10-14 | SQL: FIFO, skip ineligible, promotion debits once; flag off hides all UI (ADR-021) |
 
 ## Phase 5 — White-label proof + release ⏳
 
@@ -114,5 +114,5 @@ Credits in Phase 3 are granted by SQL/seed (no admin UI yet) so booking can debi
 | New CI workflow | 2.4 | Pipeline change |
 | Create Supabase project, SMTP sender | 3.5 | External service, possible cost |
 | Prod auth settings, migrations, repo variables, admin bootstrap | 3.5 | Production data and settings |
-| Waitlist promotion rule | 4.4 | Business rule |
+| ~~Waitlist promotion rule~~ (answered 2026-10-14) | 4.4 | Business rule |
 | Mercado Pago | V2 | Payments, contract |

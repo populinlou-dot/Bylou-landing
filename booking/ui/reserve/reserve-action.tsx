@@ -10,12 +10,14 @@ import { cx } from "../format"
 import { buttonClass } from "../primitives"
 import { ConfirmSheet } from "./confirm-sheet"
 import { useDataRefresh } from "./refresh-context"
+import { WaitlistAction } from "./waitlist-action"
 
 /**
  * "Reservar" for one session, driven by `entry.action` (decided in the application layer in the
  * domain order, so a past session never reads as "already booked"). Signed out → sign-in with
  * the intent preserved (returnTo = session detail with `reservar=1`). Signed in → confirm sheet.
- * Booked (upcoming) → note + link to "Mis reservas". Anything else → nothing (the card says why).
+ * Booked (upcoming) → note + link to "Mis reservas". Full with the waitlist on → join / place + leave
+ * (WaitlistAction). Anything else → nothing (the card says why).
  */
 export function ReserveAction({
   entry,
@@ -23,6 +25,7 @@ export function ReserveAction({
   describedBy,
   fullWidth = false,
   autoOpen = false,
+  waitlistHours = null,
 }: {
   entry: AgendaEntry
   timezone: string
@@ -30,6 +33,8 @@ export function ReserveAction({
   fullWidth?: boolean
   /** Re-open the sheet after returning from sign-in. */
   autoOpen?: boolean
+  /** Studio cancellation window (session detail): adds the waitlist rule / closed-window explanations. */
+  waitlistHours?: number | null
 }) {
   const t = useCopy()
   const auth = useAuthState()
@@ -83,6 +88,8 @@ export function ReserveAction({
             {t("success.mine")}
           </Link>
         </div>
+      ) : entry.action === "join_waitlist" || entry.action === "waiting" ? (
+        <WaitlistAction entry={entry} hours={waitlistHours} describedBy={describedBy} fullWidth={fullWidth} />
       ) : bookable ? (
         <button
           type="button"

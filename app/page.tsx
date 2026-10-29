@@ -7,7 +7,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
 const A = (p: string) => `${basePath}/${p}`
 
 const EMAIL = "yoga.byloupopulin@gmail.com"
-const whatsapp = (text: string) => `https://wa.me/5491150019537?text=${encodeURIComponent(text)}`
+const whatsapp = (text: string) => `https://api.whatsapp.com/send?phone=5491150019537&text=${encodeURIComponent(text)}`
 const ig = (t: string) => `https://ig.me/m/bylou.yoga?text=${encodeURIComponent(t)}`
 const mail = (s: string, b: string) => `mailto:${EMAIL}?subject=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`
 const EASE = "cubic-bezier(.22,.61,.36,1)"

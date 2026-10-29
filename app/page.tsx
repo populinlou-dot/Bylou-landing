@@ -1536,7 +1536,7 @@ export default function YogaLanding() {
               <img src={A(MEDITATION_PHOTO.src)} alt={MEDITATION_PHOTO.alt} loading="lazy" width={932} height={660} />
               <figcaption>
                 <span>De a poco, a tu manera.</span>
-                <p>No hace falta dejar la mente en blanco.</p>
+                <p>La pausa también se practica.</p>
               </figcaption>
             </figure>
             <div className="meditation-copy" data-reveal="up">

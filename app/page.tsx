@@ -261,7 +261,11 @@ const CTA_ASSURANCE = [
 ]
 
 const WA_LINK = whatsapp("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba, mi nombre es.. \u{1F64C}\u2728")
-const WA_MEDIT = whatsapp("Hola Lou! Vengo de la web y quiero más información sobre meditación 🌸")
+const WA_MEDIT = whatsapp("Hola, Lou. Estuve viendo la propuesta de meditación en tu web y me gustaría conocer cómo son las clases")
+// Foto real existente; la fotografía anterior se conserva en public/assets/meditacion-rio.png.
+const MEDITATION_PHOTO = { src: "assets/practice.jpg", alt: "Lou sentada con las piernas cruzadas y las manos en gesto de meditación" }
+// Sin promoción aprobada. Mantener la presentación disponible para una oferta futura.
+const MEDITATION_OFFER: string | null = null
 const MAIL_LINK = mail("Consulta desde la web — Yoga ByLou", "Hola Lou!\n\nTe escribo desde la web. Me interesa:\n\n")
 
 
@@ -898,7 +902,7 @@ export default function YogaLanding() {
         .meditation-intro-note { color:#786558; font-size:13px; }
         .meditation-layout { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:clamp(36px,6vw,84px); align-items:center; }
         .meditation-photo { margin:0; position:relative; align-self:stretch; min-height:590px; overflow:hidden; border-radius:220px 220px 24px 24px; background:#D9D0BF; }
-        .meditation-photo img { position:absolute; width:100%; height:100%; object-fit:cover; object-position:58% 50%; }
+        .meditation-photo img { position:absolute; width:100%; height:100%; object-fit:cover; object-position:50% 35%; }
         .meditation-photo::after { content:""; position:absolute; inset:45% 0 0; background:linear-gradient(transparent,rgba(31,35,26,.76)); pointer-events:none; }
         .meditation-photo figcaption { position:absolute; z-index:1; bottom:32px; left:30px; right:30px; color:#fff9ed; }
         .meditation-photo figcaption span { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.2em; }
@@ -917,11 +921,14 @@ export default function YogaLanding() {
         .meditation-offer { display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
         .meditation-offer span { background:#EADFAD; color:#614B23; padding:6px 10px; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:.08em; }
         .meditation-offer p { margin:0; color:#786052; font-size:12px; }
-        .meditation-action-note { color:#786052; font-size:11.5px; }
-        .meditation-button:focus-visible { outline:3px solid #A87D38; outline-offset:4px; }
+        .meditation-action-note { color:#786052; font-size:13px; line-height:1.5; }
+        .meditation-button svg { flex-shrink:0; }
+        .meditation-button span { min-width:0; text-wrap:balance; }
+        .meditation-button:focus-visible { outline:3px solid #8B1A28; outline-offset:4px; }
         @media (max-width:900px) {
           .meditation-section { padding:64px 26px; }
           .meditation-layout { gap:32px; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); }
+          .meditation-button { padding:14px 18px !important; gap:9px !important; }
           .meditation-photo { min-height:520px; }
           .meditation-copy h2 { font-size:34px; }
         }
@@ -930,7 +937,7 @@ export default function YogaLanding() {
           .meditation-heading { margin-bottom:26px; padding-bottom:17px; }
           .meditation-intro-note { display:none; }
           .meditation-layout { grid-template-columns:minmax(0,1fr); gap:28px; }
-          .meditation-photo { min-height:0; height:300px; border-radius:150px 150px 20px 20px; max-width:420px; width:100%; justify-self:center; }
+          .meditation-photo { min-height:0; height:auto; aspect-ratio:4/5; border-radius:150px 150px 20px 20px; max-width:420px; width:100%; justify-self:center; }
           .meditation-photo figcaption { bottom:23px; left:24px; right:24px; }
           .meditation-photo figcaption p { font-size:27px; }
           .meditation-copy h2 { font-size:34px; }
@@ -1527,7 +1534,7 @@ export default function YogaLanding() {
           </div>
           <div className="meditation-layout">
             <figure className="meditation-photo" data-reveal="scale">
-              <img src={A("assets/meditacion-rio.png")} alt="Una pausa junto al río al atardecer" loading="lazy" />
+              <img src={A(MEDITATION_PHOTO.src)} alt={MEDITATION_PHOTO.alt} loading="lazy" width={710} height={1134} />
               <figcaption>
                 <span>De a poco, a tu manera.</span>
                 <p>No hace falta dejar la mente en blanco.</p>
@@ -1535,19 +1542,19 @@ export default function YogaLanding() {
             </figure>
             <div className="meditation-copy" data-reveal="up">
               <h2 id="meditacion-title">Un momento de pausa.<br /><em>Una forma de volver a vos.</em></h2>
-              <p className="meditation-lead">Meditación para mentes curiosas, que quieren practicar y también entender el porqué.</p>
-              <p className="meditation-description">Meditar puede ser entrenar la atención o aprender a observar lo que sentís sin juzgarte. No hay una única manera: encontramos una práctica que tenga sentido para vos.</p>
+              <p className="meditation-lead">Meditación para mentes curiosas, incluso si nunca meditaste.</p>
+              <p className="meditation-description">No necesitás dejar la mente en blanco ni hacerlo perfecto. Te acompaño a explorar distintas maneras de entrenar la atención, observar tus pensamientos y encontrar una práctica que tenga sentido para vos.</p>
               <ol className="meditation-steps">
-                <li><span className="meditation-step-number">01</span><div><h3>Partimos de lo que necesitás</h3><p>Charlamos sobre qué buscás: más foco, una pausa o relacionarte de otra manera con tus pensamientos.</p></div></li>
-                <li><span className="meditation-step-number">02</span><div><h3>Exploramos, sin exigencias</h3><p>Probamos distintas prácticas de atención, respiración y observación. No tenés que hacerlo perfecto.</p></div></li>
-                <li><span className="meditation-step-number">03</span><div><h3>Lo llevás a tu día a día</h3><p>Construimos una forma de practicar que encaje con vos y con tu ritmo.</p></div></li>
+                <li><span className="meditation-step-number" aria-hidden="true">01</span><div><h3>Empezamos por vos.</h3><p>Conversamos sobre qué te gustaría explorar y qué esperás de la práctica.</p></div></li>
+                <li><span className="meditation-step-number" aria-hidden="true">02</span><div><h3>Practicamos sin exigencias.</h3><p>Exploramos herramientas de atención, respiración y observación, adaptándolas a tu experiencia.</p></div></li>
+                <li><span className="meditation-step-number" aria-hidden="true">03</span><div><h3>La llevás a tu día a día.</h3><p>Buscamos una manera de incorporar la meditación a tu rutina, a tu ritmo.</p></div></li>
               </ol>
               <div className="meditation-action">
-                <div className="meditation-offer"><span>20% OFF</span><p>Consultame por la propuesta de meditación.</p></div>
-                <Hov tag="a" href={WA_MEDIT} target="_blank" rel="noopener noreferrer" className="meditation-button" css="display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:56px;padding:14px 25px;border-radius:99px;background:#8B1A28;color:#FFF9F5;font-size:15px;font-weight:600;text-decoration:none;transition:background .25s,transform .25s,box-shadow .25s" hover="background:#6B0505;transform:translateY(-2px);box-shadow:0 12px 24px -16px rgba(74,0,0,.55)">
-                  <WhatsAppIcon /> Quiero empezar a meditar <ArrowIcon size={16} />
+                {MEDITATION_OFFER && <div className="meditation-offer"><span>{MEDITATION_OFFER}</span></div>}
+                <Hov tag="a" href={WA_MEDIT} target="_blank" rel="noopener noreferrer" aria-describedby="meditation-contact-note" className="meditation-button" css="display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:56px;padding:14px 25px;border-radius:99px;background:#8B1A28;color:#FFF9F5;font-size:15px;font-weight:600;text-decoration:none;transition:background .25s,transform .25s,box-shadow .25s" hover="background:#6B0505;transform:translateY(-2px);box-shadow:0 12px 24px -16px rgba(74,0,0,.55)">
+                  <WhatsAppIcon /> <span>Quiero conocer las clases de meditación</span> <ArrowIcon size={16} />
                 </Hov>
-                <span className="meditation-action-note">Hablemos por WhatsApp · Sin experiencia previa</span>
+                <span id="meditation-contact-note" className="meditation-action-note">Consultá por WhatsApp cómo es la propuesta.</span>
               </div>
             </div>
           </div>

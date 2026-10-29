@@ -210,7 +210,6 @@ const MARQUEE_LOOP = [...MARQUEE, ...MARQUEE]
 const NAV_LINKS = [
   { key: "opiniones", href: "#opiniones", label: "Historias" },
   { key: "acerca", href: "#acerca", label: "Sobre Lou" },
-  { key: "clases", href: "#clases", label: "Clases" },
   { key: "contacto", href: "#contacto", label: "Contacto" },
   { key: "faq", href: "#faq", label: "FAQ" },
 ]
@@ -218,17 +217,16 @@ const NAV_LINKS = [
 // Fuente única del panel de escritorio y del drawer mobile: todos los
 // destinos de la página menos el hero, al que se llega por el logo.
 const NAV_PANEL = [
-  { n: "01", key: "clases", href: "#clases", title: "Clases y packs", desc: "1:1, packs mensuales y programas para empresas." },
-  { n: "02", key: "ayuda", href: "#ayuda", title: "Encontrá tu punto de partida", desc: "Estrés, dolor físico, deporte o tu equipo." },
-  { n: "03", key: "respirar", href: "#respirar", title: "Respiración 4-4-6", desc: "Probá un minuto de calma ahora mismo." },
-  { n: "04", key: "opiniones", href: "#opiniones", title: "Historias de alumnos", desc: "Siete personas contando cómo les cambió la semana." },
-  { n: "05", key: "acerca", href: "#acerca", title: "Sobre Lou", desc: "Formación, enfoque y por qué la neurociencia." },
-  { n: "06", key: "contacto", href: "#contacto", title: "Empezá esta semana", desc: "Coordinamos día, horario y tu plan." },
-  { n: "07", key: "faq", href: "#faq", title: "Preguntas frecuentes", desc: "Equipamiento, formatos, packs y reservas." },
+  { n: "01", key: "ayuda", href: "#ayuda", title: "Encontrá tu punto de partida", desc: "Estrés, dolor físico, deporte o tu equipo." },
+  { n: "02", key: "respirar", href: "#respirar", title: "Respiración 4-4-6", desc: "Probá un minuto de calma ahora mismo." },
+  { n: "03", key: "opiniones", href: "#opiniones", title: "Historias de alumnos", desc: "Siete personas contando cómo les cambió la semana." },
+  { n: "04", key: "acerca", href: "#acerca", title: "Sobre Lou", desc: "Formación, enfoque y por qué la neurociencia." },
+  { n: "05", key: "contacto", href: "#contacto", title: "Empezá esta semana", desc: "Coordinamos día, horario y tu plan." },
+  { n: "06", key: "faq", href: "#faq", title: "Preguntas frecuentes", desc: "Equipamiento, formatos, packs y reservas." },
 ]
 
 // Secciones observadas para marcar el link activo en el nav.
-const SECTION_IDS = ["inicio", "ayuda", "respirar", "opiniones", "acerca", "clases", "contacto", "faq"]
+const SECTION_IDS = ["inicio", "ayuda", "respirar", "opiniones", "acerca", "contacto", "faq"]
 
 const HERO_STATS = [
   { n: "200 h", d: "Certificación Ananda Yoga" },
@@ -255,95 +253,11 @@ const CTA_ASSURANCE = [
   { n: "03", t: "Empezás desde cero", d: "No hace falta flexibilidad ni experiencia previa." },
 ]
 
-type Plan = {
-  name: string
-  price: string
-  unit: string
-  desc: string
-  feats: { t: string }[]
-  btn: string
-  href: string
-  badge?: string | null
-  cardBg: string
-  cardBorder: string
-  cardShadow: string
-  titleColor: string
-  mutedColor: string
-  bodyColor: string
-  tickColor: string
-  btnBg: string
-  btnColor: string
-  btnBorder: string
-  badgeBg: string
-  badgeColor: string
-}
-
-const plan = (o: Partial<Plan>): Plan =>
-  ({
-    cardBg: "#fff",
-    cardBorder: "#F3DADA",
-    cardShadow: "0 22px 50px -34px rgba(74,0,0,0.5)",
-    titleColor: "#A41D2D",
-    mutedColor: "#6B0505",
-    bodyColor: "#4A0000",
-    tickColor: "#A41D2D",
-    btnBg: "transparent",
-    btnColor: "#A41D2D",
-    btnBorder: "rgba(164,29,45,0.3)",
-    badge: null,
-    badgeBg: "#FDECEC",
-    badgeColor: "#A41D2D",
-    ...o,
-  }) as Plan
-
-const PLANS: Plan[] = [
-  plan({
-    name: "Clase individual",
-    price: "$22.000",
-    unit: "/ clase",
-    desc: "Para probar el método o cuando necesitás una sesión puntual.",
-    feats: [{ t: "60 min, online o presencial" }, { t: "Plan armado para tu cuerpo" }, { t: "Sin compromiso de continuidad" }],
-    btn: "Reservar",
-    href: ig("Hola Lou! Quiero reservar una clase individual 🌸"),
-  }),
-  plan({
-    name: "Pack 4 clases",
-    price: "$79.900",
-    unit: "/ mes",
-    badge: "Más elegido",
-    cardBg: "linear-gradient(150deg,#A41D2D 0%,#8B1A28 100%)",
-    cardBorder: "#A41D2D",
-    cardShadow: "0 40px 80px -38px rgba(164,29,45,0.85)",
-    titleColor: "#fff",
-    mutedColor: "#FFE6E6",
-    bodyColor: "#FFF5F5",
-    tickColor: "#FFC3DE",
-    badgeBg: "rgba(255,255,255,0.2)",
-    badgeColor: "#fff",
-    btnBg: "#fff",
-    btnColor: "#A41D2D",
-    btnBorder: "#fff",
-    desc: "El ritmo mínimo para que tu sistema nervioso registre el cambio.",
-    feats: [{ t: "1 clase por semana, habilitado 30 días" }, { t: "Rutina corta para los días sin clase" }, { t: "Seguimiento por mensaje entre clases" }],
-    btn: "Empezar el pack",
-    href: ig("Hola Lou! Me interesa el pack de 4 clases 🌸"),
-  }),
-  plan({
-    name: "Empresas",
-    price: "A medida",
-    unit: "",
-    desc: "Pausas activas y programas de bienestar para equipos.",
-    feats: [{ t: "Sesiones de 10 a 45 min" }, { t: "Remoto o en tu oficina" }, { t: "Informe de participación del equipo" }],
-    btn: "Pedir propuesta",
-    href: ig("Hola Lou! Quiero una propuesta de yoga para mi empresa 🌸"),
-  }),
-]
-
 const IG_LINK = ig("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba 🌸")
 const IG_MEDIT = ig("Hola Lou! Vengo de la web y quiero más información sobre meditación 🌸")
 const MAIL_LINK = mail("Consulta desde la web — Yoga ByLou", "Hola Lou!\n\nTe escribo desde la web. Me interesa:\n\n")
 
-const SHOW_PRICES = true
+
 
 const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -775,7 +689,7 @@ export default function YogaLanding() {
           }
         }
         .g-benefits  { grid-template-columns: repeat(3,1fr); }
-        .g-clases    { grid-template-columns: repeat(3,1fr); }
+
         .g-contacto  { grid-template-columns: 1.1fr 0.9fr; }
         .g-faq       { grid-template-columns: 0.78fr 1.22fr; }
         /* 45 / 55 a favor de la foto. La altura del marco se acota con vh para
@@ -787,7 +701,7 @@ export default function YogaLanding() {
         .medit-frame { min-height: 400px; }
         /* Colchón contra la navbar fija: separa sin desperdiciar viewport. */
         /* El header es fijo (~72px): sin esto el ancla deja el encabezado tapado. */
-        #meditacion, #acerca, #respirar, #clases, #opiniones, #contacto, #faq, #ayuda { scroll-margin-top: 88px; }
+        #meditacion, #acerca, #respirar, #opiniones, #contacto, #faq, #ayuda { scroll-margin-top: 88px; }
         .g-footer    { grid-template-columns: 1.4fr 1fr; }
 
         /* Hero: la columna de texto manda, la foto acompaña. */
@@ -853,7 +767,7 @@ export default function YogaLanding() {
           .g-medit { gap: 32px; }
           .medit-media { max-width: 520px; justify-self: center; width: 100%; }
           .medit-frame { height: 320px; }
-          .g-clases { grid-template-columns: repeat(2,1fr); }
+
           .g-guia { grid-template-columns: 1fr; }
           .hero-sec { padding-top: 130px; }
         }
@@ -869,7 +783,7 @@ export default function YogaLanding() {
         }
 
         @media (max-width: 760px) {
-          .g-clases, .g-benefits, .g-reelhead, .g-footer { grid-template-columns: 1fr; }
+          .g-benefits, .g-reelhead, .g-footer { grid-template-columns: 1fr; }
           /* Los 4 datos del hero quedan 2x2, no en una columna larguísima. */
           .g-herostats { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
           .g-herostats .stat-div { border-left: 0 !important; padding-left: 0 !important; }
@@ -1547,64 +1461,6 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="clases" style={s("background:#FDECEC;padding:var(--sp-lg) 34px")}>
-          <div style={s("max-width:1320px;margin:0 auto")}>
-            <div data-reveal="up" style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:48px;margin-bottom:48px;flex-wrap:wrap")}>
-              <div style={s("display:flex;flex-direction:column;gap:16px;max-width:620px")}>
-                <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Clases y packs</span>
-                <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(29px,3.6vw,46px);line-height:1.04;letter-spacing:-0.03em;color:#4A0000")}>Elegí el formato que te sostiene</h2>
-              </div>
-              <p style={s("margin:0;font-size:15.5px;line-height:1.55;color:#6B0505;max-width:310px")}>Los packs quedan habilitados 30 días y reservás cada clase cuando te acomode.</p>
-            </div>
-
-            <div data-reveal="stagger" className="g-clases" style={s("display:grid;gap:24px;align-items:stretch")}>
-              {PLANS.map((p) => (
-                <Hov
-                  key={p.name}
-                  css="border-radius:28px;padding:40px 34px;display:flex;flex-direction:column;gap:20px;transition:transform .4s cubic-bezier(.22,.61,.36,1),box-shadow .4s"
-                  hover="transform:translateY(-8px);box-shadow:0 46px 80px -40px rgba(74,0,0,0.65)"
-                  style={{ background: p.cardBg, border: `1px solid ${p.cardBorder}`, boxShadow: p.cardShadow }}
-                >
-                  <div style={s("display:flex;align-items:center;justify-content:space-between;gap:12px")}>
-                    <h3 style={{ ...s("margin:0;font-size:20px;font-weight:600"), color: p.titleColor }}>{p.name}</h3>
-                    {p.badge && (
-                      <span style={{ ...s("font-size:10.5px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:6px 13px;border-radius:99px"), background: p.badgeBg, color: p.badgeColor }}>{p.badge}</span>
-                    )}
-                  </div>
-                  {SHOW_PRICES && (
-                    <div style={s("display:flex;align-items:flex-end;gap:9px")}>
-                      <span style={{ ...s("font-family:'Playfair Display',serif;font-size:clamp(32px,3.6vw,44px);line-height:1"), color: p.titleColor }}>{p.price}</span>
-                      <span style={{ ...s("font-size:14px;padding-bottom:5px"), color: p.mutedColor }}>{p.unit}</span>
-                    </div>
-                  )}
-                  <p style={{ ...s("margin:0;font-size:15px;line-height:1.55"), color: p.mutedColor }}>{p.desc}</p>
-                  <div style={s("display:flex;flex-direction:column;gap:11px;flex:1")}>
-                    {p.feats.map((f, i) => (
-                      <div key={i} style={s("display:flex;gap:11px;align-items:flex-start")}>
-                        <CheckIcon stroke={p.tickColor} size={13} style={s("flex-shrink:0;margin-top:5px")} />
-                        <span style={{ ...s("font-size:15px;line-height:1.5"), color: p.bodyColor }}>{f.t}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <Hov
-                    tag="a"
-                    href={p.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    css="display:inline-flex;align-items:center;justify-content:center;gap:9px;height:56px;padding:0 24px;border-radius:99px;font-size:15.5px;font-weight:600;transition:transform .3s cubic-bezier(.22,.61,.36,1)"
-                    hover="transform:translateY(-3px)"
-                    style={{ background: p.btnBg, color: p.btnColor, border: `1.5px solid ${p.btnBorder}` }}
-                  >
-                    {p.btn}
-                  </Hov>
-                </Hov>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Fondo #FFF8F8: #FDECEC choca con Clases (arriba) y #FFF5F5 con
-            Contacto (abajo). Es el tono claro que ya usa el gradiente del hero. */}
         <section id="meditacion" style={s("background:#FFF8F8;padding:var(--sp-md) 34px")}>
           <div className="g-medit" style={s("max-width:1180px;margin:0 auto;display:grid;gap:56px")}>
             <div data-reveal="up" style={s("display:flex;flex-direction:column")}>

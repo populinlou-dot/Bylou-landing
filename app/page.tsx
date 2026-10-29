@@ -260,7 +260,7 @@ const CTA_ASSURANCE = [
   { n: "03", t: "Empezás desde cero", d: "No hace falta flexibilidad ni experiencia previa." },
 ]
 
-const WA_LINK = whatsapp("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba, mi nombre es.. ✨")
+const WA_LINK = whatsapp("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba, mi nombre es.. \u{1F64C}\u2728")
 const WA_MEDIT = whatsapp("Hola Lou! Vengo de la web y quiero más información sobre meditación 🌸")
 const MAIL_LINK = mail("Consulta desde la web — Yoga ByLou", "Hola Lou!\n\nTe escribo desde la web. Me interesa:\n\n")
 

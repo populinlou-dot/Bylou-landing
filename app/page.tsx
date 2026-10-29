@@ -262,8 +262,7 @@ const CTA_ASSURANCE = [
 
 const WA_LINK = whatsapp("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba, mi nombre es.. \u{1F64C}\u2728")
 const WA_MEDIT = whatsapp("Hola, Lou. Estuve viendo la propuesta de meditación en tu web y me gustaría conocer cómo son las clases")
-// Foto real existente; la fotografía anterior se conserva en public/assets/meditacion-rio.png.
-const MEDITATION_PHOTO = { src: "assets/practice.jpg", alt: "Lou sentada con las piernas cruzadas y las manos en gesto de meditación" }
+const MEDITATION_PHOTO = { src: "assets/meditacion-rio.png", alt: "Práctica de yoga junto al río al atardecer" }
 // Sin promoción aprobada. Mantener la presentación disponible para una oferta futura.
 const MEDITATION_OFFER: string | null = null
 const MAIL_LINK = mail("Consulta desde la web — Yoga ByLou", "Hola Lou!\n\nTe escribo desde la web. Me interesa:\n\n")
@@ -902,7 +901,7 @@ export default function YogaLanding() {
         .meditation-intro-note { color:#786558; font-size:13px; }
         .meditation-layout { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:clamp(36px,6vw,84px); align-items:center; }
         .meditation-photo { margin:0; position:relative; align-self:stretch; min-height:590px; overflow:hidden; border-radius:220px 220px 24px 24px; background:#D9D0BF; }
-        .meditation-photo img { position:absolute; width:100%; height:100%; object-fit:cover; object-position:50% 35%; }
+        .meditation-photo img { position:absolute; width:100%; height:100%; object-fit:cover; object-position:58% 50%; }
         .meditation-photo::after { content:""; position:absolute; inset:45% 0 0; background:linear-gradient(transparent,rgba(31,35,26,.76)); pointer-events:none; }
         .meditation-photo figcaption { position:absolute; z-index:1; bottom:32px; left:30px; right:30px; color:#fff9ed; }
         .meditation-photo figcaption span { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.2em; }
@@ -1534,7 +1533,7 @@ export default function YogaLanding() {
           </div>
           <div className="meditation-layout">
             <figure className="meditation-photo" data-reveal="scale">
-              <img src={A(MEDITATION_PHOTO.src)} alt={MEDITATION_PHOTO.alt} loading="lazy" width={710} height={1134} />
+              <img src={A(MEDITATION_PHOTO.src)} alt={MEDITATION_PHOTO.alt} loading="lazy" width={932} height={660} />
               <figcaption>
                 <span>De a poco, a tu manera.</span>
                 <p>No hace falta dejar la mente en blanco.</p>

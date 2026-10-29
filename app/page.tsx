@@ -7,6 +7,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
 const A = (p: string) => `${basePath}/${p}`
 
 const EMAIL = "yoga.byloupopulin@gmail.com"
+const whatsapp = (text: string) => `https://wa.me/5491150019537?text=${encodeURIComponent(text)}`
 const ig = (t: string) => `https://ig.me/m/bylou.yoga?text=${encodeURIComponent(t)}`
 const mail = (s: string, b: string) => `mailto:${EMAIL}?subject=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`
 const EASE = "cubic-bezier(.22,.61,.36,1)"
@@ -73,6 +74,12 @@ const MailIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect width="20" height="16" x="2" y="4" rx="2" />
     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
+)
+
+const WhatsAppIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M20.52 3.48A11.85 11.85 0 0 0 12.05 0C5.49 0 .15 5.34.15 11.9c0 2.1.55 4.15 1.59 5.96L.05 24l6.29-1.65a11.9 11.9 0 0 0 5.7 1.45h.01c6.56 0 11.9-5.34 11.9-11.9 0-3.18-1.24-6.17-3.43-8.42ZM12.05 21.8a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.73.98.99-3.64-.23-.37a9.87 9.87 0 0 1-1.51-5.28c0-5.45 4.43-9.89 9.88-9.89a9.83 9.83 0 0 1 7 2.9 9.83 9.83 0 0 1 2.89 7c0 5.45-4.44 9.89-9.9 9.89Zm5.42-7.4c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.64.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.44-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.22 3.08.15.2 2.1 3.2 5.08 4.48.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35Z" />
   </svg>
 )
 
@@ -253,8 +260,8 @@ const CTA_ASSURANCE = [
   { n: "03", t: "Empezás desde cero", d: "No hace falta flexibilidad ni experiencia previa." },
 ]
 
-const IG_LINK = ig("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba 🌸")
-const IG_MEDIT = ig("Hola Lou! Vengo de la web y quiero más información sobre meditación 🌸")
+const WA_LINK = whatsapp("Hola Lou! Vengo de la web y me gustaría reservar una clase de prueba 🌸")
+const WA_MEDIT = whatsapp("Hola Lou! Vengo de la web y quiero más información sobre meditación 🌸")
 const MAIL_LINK = mail("Consulta desde la web — Yoga ByLou", "Hola Lou!\n\nTe escribo desde la web. Me interesa:\n\n")
 
 
@@ -993,7 +1000,7 @@ export default function YogaLanding() {
               </svg>
             </button>
 
-            <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" className="nav-cta" css="position:relative;overflow:hidden;flex-shrink:0;display:inline-flex;align-items:center;gap:11px;height:46px;padding:0 22px;border-radius:var(--r-md);background:#A41D2D;color:#fff;font-size:14.5px;font-weight:600;white-space:nowrap;box-shadow:0 6px 18px -10px rgba(164,29,45,0.7);transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-2px);box-shadow:0 22px 44px -16px rgba(164,29,45,0.9)">
+            <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" className="nav-cta" css="position:relative;overflow:hidden;flex-shrink:0;display:inline-flex;align-items:center;gap:11px;height:46px;padding:0 22px;border-radius:var(--r-md);background:#A41D2D;color:#fff;font-size:14.5px;font-weight:600;white-space:nowrap;box-shadow:0 6px 18px -10px rgba(164,29,45,0.7);transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-2px);box-shadow:0 22px 44px -16px rgba(164,29,45,0.9)">
               <span data-cta-label="" style={s("position:relative")}>Reservar clase de prueba</span>
               <ArrowIcon size={16} />
             </Hov>
@@ -1056,7 +1063,7 @@ export default function YogaLanding() {
           </div>
 
           <a
-            href={IG_LINK}
+            href={WA_LINK}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setDrawerOpen(false)}
@@ -1089,7 +1096,7 @@ export default function YogaLanding() {
                 Clases 1:1 y grupales que combinan Hatha Yoga con neurociencia práctica. Menos ansiedad, mejor sueño y una atención que te devuelve el día.
               </p>
               <div data-reveal="up" style={s("display:flex;flex-wrap:wrap;gap:13px;align-items:center")}>
-                <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:60px;padding:0 32px;border-radius:99px;background:#A41D2D;color:#fff;font-size:16.5px;font-weight:600;box-shadow:0 18px 40px -16px rgba(164,29,45,0.9);transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-3px);box-shadow:0 28px 54px -18px rgba(164,29,45,0.95)">
+                <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:60px;padding:0 32px;border-radius:99px;background:#A41D2D;color:#fff;font-size:16.5px;font-weight:600;box-shadow:0 18px 40px -16px rgba(164,29,45,0.9);transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-3px);box-shadow:0 28px 54px -18px rgba(164,29,45,0.95)">
                   Reservar clase de prueba
                   <ArrowIcon />
                 </Hov>
@@ -1222,7 +1229,11 @@ export default function YogaLanding() {
                   ))}
                 </div>
                 <div style={s("display:flex;flex-wrap:wrap;gap:11px;align-items:center;padding-top:8px")}>
-                  <Hov tag="a" href={ig(active.msg)} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 28px;border-radius:99px;background:#A41D2D;color:#fff;font-size:15.5px;font-weight:600;box-shadow:0 16px 36px -16px rgba(164,29,45,0.9);transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
+                  <Hov tag="a" href={whatsapp(active.msg)} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 28px;border-radius:99px;background:#A41D2D;color:#fff;font-size:15.5px;font-weight:600;box-shadow:0 16px 36px -16px rgba(164,29,45,0.9);transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
+                    <WhatsAppIcon />
+                    {active.cta.replace("Instagram", "WhatsApp")}
+                  </Hov>
+                  <Hov tag="a" href={ig(active.msg)} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 28px;border-radius:99px;background:transparent;color:#A41D2D;border:1.5px solid rgba(164,29,45,0.28);font-size:15.5px;font-weight:600;box-shadow:0 16px 36px -16px rgba(164,29,45,0.9);transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
                     <IgIcon />
                     {active.cta}
                   </Hov>
@@ -1387,7 +1398,7 @@ export default function YogaLanding() {
             </div>
 
             <div style={s("max-width:1320px;width:100%;margin:0 auto;padding:0 34px;display:flex;align-items:center;gap:20px;flex-wrap:wrap")}>
-              <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:58px;padding:0 30px;border-radius:99px;background:#fff;color:#A41D2D;font-size:16px;font-weight:600;box-shadow:0 22px 44px -22px rgba(0,0,0,0.8);transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
+              <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:58px;padding:0 30px;border-radius:99px;background:#fff;color:#A41D2D;font-size:16px;font-weight:600;box-shadow:0 22px 44px -22px rgba(0,0,0,0.8);transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
                 La próxima historia puede ser la tuya
                 <ArrowIcon />
               </Hov>
@@ -1505,7 +1516,7 @@ export default function YogaLanding() {
 
                 <Hov
                   tag="a"
-                  href={IG_MEDIT}
+                  href={WA_MEDIT}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="medit-btn"
@@ -1559,7 +1570,11 @@ export default function YogaLanding() {
                 <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(34px,4.8vw,60px);line-height:0.98;letter-spacing:-0.035em;color:#fff;text-wrap:balance")}>Empezá esta semana</h2>
                 <p style={s("margin:0;font-size:19.5px;line-height:1.55;color:rgba(255,255,255,0.82);max-width:520px")}>Un mensaje y coordinamos. Te propongo día, horario y un plan pensado para tu cuerpo y tu semana real.</p>
                 <div style={s("display:flex;flex-wrap:wrap;gap:13px;padding-top:6px")}>
-                  <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:58px;padding:0 32px;border-radius:99px;background:#FCE7EC;color:#8B1A28;font-size:16.5px;font-weight:700;border:1px solid rgba(164,29,45,0.18);box-shadow:0 10px 26px -14px rgba(0,0,0,0.4);transition:transform .26s cubic-bezier(.22,.61,.36,1),box-shadow .26s,background .26s" hover="transform:translateY(-2px);background:#FBDCE4;box-shadow:0 16px 32px -16px rgba(0,0,0,0.45)">
+                  <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;height:58px;padding:0 32px;border-radius:99px;background:#FCE7EC;color:#8B1A28;font-size:16.5px;font-weight:700;border:1px solid rgba(164,29,45,0.18);box-shadow:0 10px 26px -14px rgba(0,0,0,0.4);transition:transform .26s cubic-bezier(.22,.61,.36,1),box-shadow .26s,background .26s" hover="transform:translateY(-2px);background:#FBDCE4;box-shadow:0 16px 32px -16px rgba(0,0,0,0.45)">
+                    <WhatsAppIcon size={19} />
+                    Escribime por WhatsApp
+                  </Hov>
+                  <Hov tag="a" href={ig("Hola Lou! Vengo de la web 🌸")} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:11px;min-height:58px;padding:0 28px;border-radius:99px;background:transparent;border:1.5px solid rgba(255,255,255,0.5);color:#fff;font-size:16.5px;font-weight:600;transition:background .3s" hover="background:rgba(255,255,255,0.14)">
                     <IgIcon size={19} />
                     Escribime por Instagram
                   </Hov>
@@ -1593,8 +1608,8 @@ export default function YogaLanding() {
               <span style={s("font-size:12px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#A41D2D")}>Dudas</span>
               <h2 style={s("margin:0;font-family:'Playfair Display',serif;font-size:clamp(28px,3.3vw,42px);line-height:1.04;letter-spacing:-0.03em;color:#4A0000")}>Preguntas frecuentes</h2>
               <p style={s("margin:0;font-size:16.5px;line-height:1.55;color:#6B0505")}>¿Quedó algo afuera? Escribime y te contesto en el día.</p>
-              <Hov tag="a" href={MAIL_LINK} css="display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 24px;border-radius:99px;background:#fff;border:1px solid rgba(164,29,45,0.18);color:#A41D2D;font-size:15px;font-weight:600;align-self:flex-start;transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-3px);box-shadow:0 16px 32px -18px rgba(74,0,0,0.5)">
-                <MailIcon />
+              <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 24px;border-radius:99px;background:#fff;border:1px solid rgba(164,29,45,0.18);color:#A41D2D;font-size:15px;font-weight:600;align-self:flex-start;transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s" hover="transform:translateY(-3px);box-shadow:0 16px 32px -18px rgba(74,0,0,0.5)">
+                <WhatsAppIcon />
                 Hacer una pregunta
               </Hov>
             </div>
@@ -1640,16 +1655,19 @@ export default function YogaLanding() {
                 <p style={s("margin:0;font-family:'Playfair Display',serif;font-size:34px;line-height:1.14;letter-spacing:-0.02em;color:#fff;max-width:480px")}>Tu sistema nervioso también aprende.</p>
               </div>
               <div style={s("display:flex;flex-direction:column;gap:14px;align-items:flex-start")}>
-                <Hov tag="a" href={IG_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 28px;border-radius:99px;background:#fff;color:#A41D2D;font-size:15.5px;font-weight:600;transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
+                <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" css="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 28px;border-radius:99px;background:#fff;color:#A41D2D;font-size:15.5px;font-weight:600;transition:transform .3s cubic-bezier(.22,.61,.36,1)" hover="transform:translateY(-3px)">
                   Reservar clase de prueba
                   <ArrowIcon size={16} />
                 </Hov>
                 <div style={s("display:flex;flex-wrap:wrap;gap:20px;font-size:14.5px")}>
+                  <Hov tag="a" href={WA_LINK} target="_blank" rel="noopener noreferrer" css="color:#fff" hover="color:#FCE7EC">
+                    WhatsApp · +54 9 11 5001 9537
+                  </Hov>
+                  <Hov tag="a" href="https://www.instagram.com/bylou.yoga" target="_blank" rel="noopener noreferrer" css="color:rgba(255,255,255,0.85)" hover="color:#fff">
+                    @bylou.yoga
+                  </Hov>
                   <Hov tag="a" href={`mailto:${EMAIL}`} css="color:rgba(255,255,255,0.75)" hover="color:#fff">
                     {EMAIL}
-                  </Hov>
-                  <Hov tag="a" href="https://www.instagram.com/bylou.yoga" target="_blank" rel="noopener noreferrer" css="color:rgba(255,255,255,0.75)" hover="color:#fff">
-                    @bylou.yoga
                   </Hov>
                 </div>
               </div>

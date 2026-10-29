@@ -892,6 +892,54 @@ export default function YogaLanding() {
           .hero-media { max-width: 210px !important; }
         }
 
+        .meditation-section { background:#F9F5EA; padding:88px 34px 96px; }
+        .meditation-heading { max-width:1180px; margin:0 auto 32px; padding-bottom:21px; border-bottom:1px solid rgba(114,66,42,.18); display:flex; justify-content:space-between; align-items:center; gap:18px; }
+        .meditation-eyebrow { color:#8B1A28; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.19em; }
+        .meditation-intro-note { color:#786558; font-size:13px; }
+        .meditation-layout { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:clamp(36px,6vw,84px); align-items:center; }
+        .meditation-photo { margin:0; position:relative; align-self:stretch; min-height:590px; overflow:hidden; border-radius:220px 220px 24px 24px; background:#D9D0BF; }
+        .meditation-photo img { position:absolute; width:100%; height:100%; object-fit:cover; object-position:58% 50%; }
+        .meditation-photo::after { content:""; position:absolute; inset:45% 0 0; background:linear-gradient(transparent,rgba(31,35,26,.76)); pointer-events:none; }
+        .meditation-photo figcaption { position:absolute; z-index:1; bottom:32px; left:30px; right:30px; color:#fff9ed; }
+        .meditation-photo figcaption span { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.2em; }
+        .meditation-photo figcaption p { font-family:'Playfair Display',serif; font-size:clamp(25px,2.6vw,34px); line-height:1.16; margin:12px 0 0; max-width:12em; }
+        .meditation-copy { min-width:0; }
+        .meditation-copy h2 { margin:0; color:#4A0000; font-family:'Playfair Display',serif; font-size:clamp(32px,3.4vw,47px); line-height:1.1; letter-spacing:-.035em; text-wrap:balance; }
+        .meditation-copy h2 em { color:#9A414B; font-weight:400; }
+        .meditation-lead { margin:22px 0 0; color:#63382F; font-size:18px; line-height:1.55; max-width:33em; }
+        .meditation-description { margin:14px 0 0; color:#786052; font-size:15px; line-height:1.7; }
+        .meditation-steps { list-style:none; padding:0; margin:26px 0 0; }
+        .meditation-steps li { display:flex; gap:17px; padding:17px 0; border-top:1px solid rgba(114,66,42,.15); }
+        .meditation-step-number { color:#9A414B; font-family:'Playfair Display',serif; font-size:18px; line-height:1.4; }
+        .meditation-steps h3 { margin:0; color:#542A26; font-size:15px; font-weight:600; }
+        .meditation-steps p { margin:5px 0 0; color:#786052; font-size:14px; line-height:1.6; }
+        .meditation-action { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin-top:15px; }
+        .meditation-offer { display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
+        .meditation-offer span { background:#EADFAD; color:#614B23; padding:6px 10px; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:.08em; }
+        .meditation-offer p { margin:0; color:#786052; font-size:12px; }
+        .meditation-action-note { color:#786052; font-size:11.5px; }
+        .meditation-button:focus-visible { outline:3px solid #A87D38; outline-offset:4px; }
+        @media (max-width:900px) {
+          .meditation-section { padding:64px 26px; }
+          .meditation-layout { gap:32px; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); }
+          .meditation-photo { min-height:520px; }
+          .meditation-copy h2 { font-size:34px; }
+        }
+        @media (max-width:640px) {
+          #meditacion.meditation-section { padding:48px 22px !important; }
+          .meditation-heading { margin-bottom:26px; padding-bottom:17px; }
+          .meditation-intro-note { display:none; }
+          .meditation-layout { grid-template-columns:minmax(0,1fr); gap:28px; }
+          .meditation-photo { min-height:0; height:300px; border-radius:150px 150px 20px 20px; max-width:420px; width:100%; justify-self:center; }
+          .meditation-photo figcaption { bottom:23px; left:24px; right:24px; }
+          .meditation-photo figcaption p { font-size:27px; }
+          .meditation-copy h2 { font-size:34px; }
+          .meditation-lead { font-size:17px; margin-top:18px; }
+          .meditation-description { font-size:14px; }
+          .meditation-steps { margin-top:22px; }
+          .meditation-button { width:100%; font-size:14px !important; }
+          .meditation-action-note { align-self:center; text-align:center; }
+        }
         /* Sin esto la página es hostil para quien tiene sensibilidad vestibular:
            hay tres carruseles infinitos corriendo a la vez. */
         @media (prefers-reduced-motion: reduce) {
@@ -1472,90 +1520,38 @@ export default function YogaLanding() {
           </div>
         </section>
 
-        <section id="meditacion" style={s("background:#FFF8F8;padding:var(--sp-md) 34px")}>
-          <div className="g-medit" style={s("max-width:1180px;margin:0 auto;display:grid;gap:56px")}>
-            <div data-reveal="up" style={s("display:flex;flex-direction:column")}>
-              {/* Eyebrow puramente tipográfico: sin punto ni cápsula, para que
-                  lea como categoría editorial y no como badge. */}
-              <span className="medit-eyebrow" style={s("font-size:11px;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#A41D2D")}>Meditación</span>
-
-              {/* El max-width fuerza un corte de dos líneas deliberado en vez de
-                  dejarlo al azar del ancho de columna. */}
-              <h2 className="medit-title" style={s("margin:10px 0 0;font-family:'Playfair Display',serif;font-size:clamp(29px,2.9vw,40px);line-height:1.05;letter-spacing:-0.032em;color:#4A0000;max-width:11.5em")}>
-                ¿Querés aprender a <span style={s("color:var(--fucsia)")}>meditar</span>?
-              </h2>
-
-              {/* Puente entre título y cuerpo: peso normal y menor escala para
-                  que no funcione como segundo titular. */}
-              <p className="medit-sub" style={s("margin:18px 0 0;font-size:17px;line-height:1.5;color:#5C2130;max-width:34em;font-weight:400;text-wrap:pretty")}>
-                <span style={s("background:linear-gradient(180deg,rgba(234,217,154,0) 63%,var(--butter-soft) 63%);box-decoration-break:clone;-webkit-box-decoration-break:clone")}>Meditación para mentes curiosas</span>, a las que les gusta entender el porqué y el cómo de las cosas.
-              </p>
-
-              {/* 64em de ancho de lectura: líneas más largas significan menos
-                  líneas totales, que es de dónde sale la altura que sobraba. */}
-              <div className="medit-body" style={s("display:flex;flex-direction:column;gap:13px;margin-top:20px;max-width:64ch")}>
-                <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
-                  Para algunas personas, meditar tiene más que ver con entrenar la atención. Para otras, con aprender a observar pensamientos, emociones y sensaciones sin juzgarlos ni quedar atrapadas en ellos. Y ninguna de las dos formas está equivocada.
-                </p>
-                <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
-                  Existen muchísimas prácticas y maneras de meditar. Por eso, la idea no es enseñarte una única técnica, sino charlar, entender qué buscás y practicar diferentes formas hasta encontrar la que más se asocie con vos.
-                </p>
-                <p style={s("margin:0;font-size:16px;line-height:1.55;color:#6B0505;text-wrap:pretty")}>
-                  Ya sea que quieras entrenar tu atención, mejorar tu concentración, trabajar la memoria, sentir mayor calma o simplemente aprender a relacionarte de otra manera con lo que pasa en tu mente, vamos a construir una práctica que tenga sentido para vos.
-                </p>
-              </div>
-
-              <div className="medit-cta" style={s("display:flex;flex-direction:column;align-items:flex-start;gap:11px;margin-top:26px")}>
-                {/* Badge, no botón: no compite con el CTA porque no es clickeable
-                    ni usa el bordó lleno. */}
-                {/* Manteca de fondo + bordó de texto: el momento más claro del
-                    nuevo amarillo. El punto fucsia lo ata al resto de la sección. */}
-                <span className="medit-badge" style={s("display:inline-flex;align-items:center;padding:5px 10px;border-radius:var(--r-sm);background:var(--butter-wash);border:1px solid rgba(210,181,101,0.5);color:#8B1A28;font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;white-space:nowrap")}>
-                  20% OFF
-                </span>
-
-                <Hov
-                  tag="a"
-                  href={WA_MEDIT}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="medit-btn"
-                  css="display:inline-flex;align-items:center;justify-content:center;gap:14px;height:44px;padding:0 22px;border-radius:var(--r-md);background:#7C1526;color:#FFF9F5;font-size:14px;font-weight:500;letter-spacing:0.01em;cursor:pointer;transition:background .24s ease,box-shadow .24s ease"
-                  hover="background:#6A1120;box-shadow:0 4px 14px -8px rgba(74,0,0,0.45)"
-                >
-                  Quiero recibir más información
-                  {/* Flecha manteca: el detalle que evita repetir el amarillo
-                      del badge y a la vez los emparenta. */}
-                  <span className="medit-arrow" style={s("display:inline-flex;color:var(--butter);transition:transform .24s cubic-bezier(.22,.61,.36,1)")}>
-                    <ArrowIcon size={14} />
-                  </span>
+        <section id="meditacion" aria-labelledby="meditacion-title" className="meditation-section">
+          <div className="meditation-heading" data-reveal="up">
+            <span className="meditation-eyebrow">Meditación · Un espacio para vos</span>
+            <span className="meditation-intro-note">Bajar un cambio. Volver a lo simple.</span>
+          </div>
+          <div className="meditation-layout">
+            <figure className="meditation-photo" data-reveal="scale">
+              <img src={A("assets/meditacion-rio.png")} alt="Una pausa junto al río al atardecer" loading="lazy" />
+              <figcaption>
+                <span>De a poco, a tu manera.</span>
+                <p>No hace falta dejar la mente en blanco.</p>
+              </figcaption>
+            </figure>
+            <div className="meditation-copy" data-reveal="up">
+              <h2 id="meditacion-title">Un momento de pausa.<br /><em>Una forma de volver a vos.</em></h2>
+              <p className="meditation-lead">Meditación para mentes curiosas, que quieren practicar y también entender el porqué.</p>
+              <p className="meditation-description">Meditar puede ser entrenar la atención o aprender a observar lo que sentís sin juzgarte. No hay una única manera: encontramos una práctica que tenga sentido para vos.</p>
+              <ol className="meditation-steps">
+                <li><span className="meditation-step-number">01</span><div><h3>Partimos de lo que necesitás</h3><p>Charlamos sobre qué buscás: más foco, una pausa o relacionarte de otra manera con tus pensamientos.</p></div></li>
+                <li><span className="meditation-step-number">02</span><div><h3>Exploramos, sin exigencias</h3><p>Probamos distintas prácticas de atención, respiración y observación. No tenés que hacerlo perfecto.</p></div></li>
+                <li><span className="meditation-step-number">03</span><div><h3>Lo llevás a tu día a día</h3><p>Construimos una forma de practicar que encaje con vos y con tu ritmo.</p></div></li>
+              </ol>
+              <div className="meditation-action">
+                <div className="meditation-offer"><span>20% OFF</span><p>Consultame por la propuesta de meditación.</p></div>
+                <Hov tag="a" href={WA_MEDIT} target="_blank" rel="noopener noreferrer" className="meditation-button" css="display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:56px;padding:14px 25px;border-radius:99px;background:#8B1A28;color:#FFF9F5;font-size:15px;font-weight:600;text-decoration:none;transition:background .25s,transform .25s,box-shadow .25s" hover="background:#6B0505;transform:translateY(-2px);box-shadow:0 12px 24px -16px rgba(74,0,0,.55)">
+                  <WhatsAppIcon /> Quiero empezar a meditar <ArrowIcon size={16} />
                 </Hov>
-              </div>
-            </div>
-
-            {/* La altura la fija el contenedor y la imagen lo llena. Con
-                aspect-ratio 4/5 la foto medía 800px de alto y era lo que
-                empujaba la sección más allá de una pantalla. */}
-            {/* La foto se estira a la altura exacta de la columna de texto:
-                bordes superior e inferior alineados, para que lean como una
-                sola composición y no como una tarjeta al costado. */}
-            <div data-reveal="scale" className="medit-media" style={s("position:relative;display:flex")}>
-              <div className="medit-frame" style={s("position:relative;flex:1;border-radius:var(--r-lg);overflow:hidden;background:#E8DFD2;box-shadow:0 18px 40px -30px rgba(74,0,0,0.4)")}>
-                <img
-                  className="medit-img"
-                  src={A("assets/meditacion-rio.png")}
-                  alt="Práctica de yoga junto al río al atardecer"
-                  loading="lazy"
-                  style={s("width:100%;height:100%;object-fit:cover;object-position:58% 50%;display:block")}
-                />
+                <span className="meditation-action-note">Hablemos por WhatsApp · Sin experiencia previa</span>
               </div>
             </div>
           </div>
-
-          {/* Espacio reservado para el bloque bordó del programa de tres semanas.
-              Sin contenido todavía: se define más adelante. */}
         </section>
-
         <section id="contacto" style={s("position:relative;overflow:hidden;background:#FFF5F5;padding:var(--sp-lg) 26px")}>
           <div data-reveal="up" style={s("position:relative;max-width:1320px;margin:0 auto;border-radius:38px;overflow:hidden;background:linear-gradient(135deg,#A41D2D 0%,#8B1A28 58%,#6B0505 100%);box-shadow:0 60px 110px -60px rgba(74,0,0,0.95)")}>
             <div style={s("position:absolute;inset:0;background:radial-gradient(ellipse 46% 68% at 22% 12%, rgba(255,255,255,0.2), transparent 65%)")} />

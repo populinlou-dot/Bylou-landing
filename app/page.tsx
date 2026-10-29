@@ -1540,9 +1540,9 @@ export default function YogaLanding() {
               </figcaption>
             </figure>
             <div className="meditation-copy" data-reveal="up">
-              <h2 id="meditacion-title">Un momento de pausa.<br /><em>Una forma de volver a vos.</em></h2>
+              <h2 id="meditacion-title">Un espacio para explorar.<br /><em>Una forma de volver a vos.</em></h2>
               <p className="meditation-lead">Meditación para mentes curiosas, incluso si nunca meditaste.</p>
-              <p className="meditation-description">No necesitás dejar la mente en blanco ni hacerlo perfecto. Te acompaño a explorar distintas maneras de entrenar la atención, observar tus pensamientos y encontrar una práctica que tenga sentido para vos.</p>
+              <p className="meditation-description">Te acompaño a explorar la atención, la respiración y la observación de tus pensamientos, para encontrar una práctica que tenga sentido para vos.</p>
               <ol className="meditation-steps">
                 <li><span className="meditation-step-number" aria-hidden="true">01</span><div><h3>Empezamos por vos.</h3><p>Conversamos sobre qué te gustaría explorar y qué esperás de la práctica.</p></div></li>
                 <li><span className="meditation-step-number" aria-hidden="true">02</span><div><h3>Practicamos sin exigencias.</h3><p>Exploramos herramientas de atención, respiración y observación, adaptándolas a tu experiencia.</p></div></li>

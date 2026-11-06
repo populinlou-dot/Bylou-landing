@@ -242,3 +242,17 @@ export {
   type SaveDisplayNameResult,
 } from "./profile"
 export { addDays, isoWeekday, localDateOf, startOfWeek, zonedTimeToInstant, type LocalDate } from "./time-zone"
+export {
+  bookingCalendarEvent,
+  buildIcs,
+  calendarEventUid,
+  escapeIcsText,
+  foldIcsLine,
+  googleCalendarUrl,
+  icsFileName,
+  isSafeMeetingUrl,
+  toCalendarUtc,
+  type BookingCalendarInput,
+  type CalendarBrand,
+  type CalendarEvent,
+} from "./calendar"

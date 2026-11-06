@@ -3,9 +3,10 @@
 import { AlertCircle, CalendarClock, CheckCircle2, UserRound } from "lucide-react"
 import Link from "next/link"
 import { useId } from "react"
-import type { AgendaEntry, BookCode } from "../../application"
+import type { AgendaEntry, BookCode, SessionPrivateDetails } from "../../application"
 import { MY_BOOKINGS_PATH } from "../../application"
 import { useBooking, useCopy, type Translate } from "../booking-context"
+import { CalendarActions } from "../calendar-actions"
 import { ContactLink } from "../contact"
 import { formatDayHeading, formatTime } from "../format"
 import { buttonClass } from "../primitives"
@@ -29,6 +30,8 @@ export interface ConfirmSheetViewProps {
   policyHours: number | null
   creditsPerBooking: number
   phase: ConfirmPhase
+  /** Attendee-only details read after a successful booking (calendar event); null until loaded or when none. */
+  privateDetails?: SessionPrivateDetails | null
   /** Set while she has no display name yet: the required name form replaces the confirm button. */
   nameStep?: Omit<ProfileNameFormProps, "describedBy"> | null
   onConfirm: () => void
@@ -119,6 +122,14 @@ export function ConfirmSheetView(props: ConfirmSheetViewProps) {
             <CheckCircle2 aria-hidden="true" className="size-5" />
             {t("mine.confirmed")}
           </p>
+          <CalendarActions
+            session={entry.session}
+            classTypeName={entry.classType.name}
+            instructorName={entry.instructorName}
+            privateDetails={props.privateDetails ?? null}
+            timezone={timezone}
+            variant="buttons"
+          />
           <Link href={MY_BOOKINGS_PATH} className={`${buttonClass.primary} w-full`}>
             {t("success.mine")}
           </Link>

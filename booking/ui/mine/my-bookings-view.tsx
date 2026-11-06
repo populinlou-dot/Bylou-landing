@@ -14,6 +14,7 @@ import {
   type MyWaitlistItem,
 } from "../../application"
 import { useBooking, useCopy, type Translate } from "../booking-context"
+import { CalendarActions } from "../calendar-actions"
 import { ContactLink } from "../contact"
 import { formatDayHeading, formatDayMonth, formatTime } from "../format"
 import { Badge, DisplayTitle, Eyebrow, SkeletonBlock, StatusPanel, buttonClass, type BadgeTone } from "../primitives"
@@ -284,6 +285,17 @@ function BookingCard({
       ) : null}
 
       {item.privateDetails ? <PrivateDetails details={item.privateDetails} /> : null}
+
+      {item.historyOutcome === null ? (
+        <CalendarActions
+          session={session}
+          classTypeName={item.classType.name}
+          instructorName={item.instructorName}
+          privateDetails={item.privateDetails}
+          timezone={tz}
+          describedBy={titleId}
+        />
+      ) : null}
 
       {item.historyOutcome === null ? <CancelArea item={item} account={account} onCancel={onCancel} /> : null}
     </article>

@@ -5,6 +5,7 @@ import { TERM_KEYS } from "./terminology"
 import { type ValidationError, isNonEmptyString, isPlainObject } from "./validation"
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const DOMAIN = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/
 const FEATURE_KEYS = ["waitlist", "groupSessions", "showCatalogStep"] as const
 
 /**
@@ -18,6 +19,7 @@ export function validateBrandConfig(brand: BrandConfig): ValidationError[] {
   if (!SLUG.test(brand.id)) add("id", "must be a lowercase slug")
   if (!isNonEmptyString(brand.name)) add("name", "must be a non-empty string")
   if (!isNonEmptyString(brand.locale)) add("locale", "must be a non-empty string")
+  if (typeof brand.domain !== "string" || !DOMAIN.test(brand.domain)) add("domain", "must be a lowercase DNS domain (no scheme)")
   if (!isNonEmptyString(brand.logo?.alt)) add("logo.alt", "must be a non-empty string")
   if (!isNonEmptyString(brand.logo?.wordmark)) add("logo.wordmark", "must be a non-empty string")
   if (!brand.contact?.instagramDm && !brand.contact?.email) add("contact", "needs at least one channel")

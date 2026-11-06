@@ -64,6 +64,8 @@ export interface BrandConfig {
   id: string
   name: string
   locale: string
+  /** DNS domain of the studio site (no scheme), e.g. "bylou.com.ar". Calendar event UIDs and the .ics PRODID use it. */
+  domain: string
   logo: BrandLogo
   /** Optional imagery by slot (e.g. emptyState). Paths relative to the base path. */
   images: Record<string, string>

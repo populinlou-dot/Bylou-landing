@@ -10,6 +10,7 @@ import {
   sessionHref,
   signInHref,
   type AgendaEntry,
+  type SessionPrivateDetails,
 } from "../../application"
 import type { StudioRules } from "../../domain"
 import { useReadyRuntime } from "../booking-context"
@@ -41,6 +42,7 @@ export function ConfirmSheet({
   const [rules, setRules] = useState<StudioRules | null>(null)
   const [balance, setBalance] = useState<BalanceState>({ status: "loading" })
   const [phase, setPhase] = useState<ConfirmPhase>({ status: "idle" })
+  const [privateDetails, setPrivateDetails] = useState<SessionPrivateDetails | null>(null)
   const [needsName, setNeedsName] = useState(false)
   const [name, setName] = useState("")
   const [nameError, setNameError] = useState<ProfileNameError | null>(null)
@@ -82,6 +84,9 @@ export function ConfirmSheet({
     if (result.ok) {
       setPhase({ status: "success" })
       onBooked()
+      // Now that she holds the booking, RLS shares the address / meeting link for her calendar event.
+      // Extra only: without it the event still has the class, time and modality.
+      repository.getSessionPrivateDetails(entry.session.id).then(setPrivateDetails, () => setPrivateDetails(null))
       return
     }
     if (result.code === "unauthenticated") {
@@ -126,6 +131,7 @@ export function ConfirmSheet({
       policyHours={rules?.cancellationWindowHours ?? null}
       creditsPerBooking={rules?.creditsPerBooking ?? 1}
       phase={phase}
+      privateDetails={privateDetails}
       nameStep={
         needsName
           ? {

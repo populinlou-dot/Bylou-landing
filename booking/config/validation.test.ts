@@ -80,4 +80,10 @@ describe("validateBrandConfig", () => {
       "rules.creditsPerBooking",
     ])
   })
+
+  it("flags a brand domain that is not a bare lowercase DNS name (calendar UIDs use it)", () => {
+    for (const domain of ["", "https://bylou.com.ar", "Bylou.com.ar", "localhost", "bylou.com.ar/reservas"]) {
+      expect(paths(validateBrandConfig(broken((b) => void (b.domain = domain)))), domain).toEqual(["domain"])
+    }
+  })
 })

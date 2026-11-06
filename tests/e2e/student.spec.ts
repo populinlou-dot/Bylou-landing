@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { SESSION, STAFF_EMAIL, STUDENT_EMAIL, expect, sessionCard, signIn, test } from "./support/fixtures"
 
 /**
@@ -81,6 +82,54 @@ test.describe("B · sign in and book", () => {
     await page.goBack()
     await expect(page).toHaveURL(new RegExp(`/reservas/sesion/\\?id=${SESSION.saturdayGroup}`))
     await expect(page.getByText(t("session.spots.many", { n: 4 }))).toBeVisible()
+  })
+})
+
+test.describe("B2 · add a booked class to the calendar (ST-11)", () => {
+  test("downloads the .ics and links to Google Calendar from the confirmation and Mis reservas", { tag: "@white-label" }, async ({ page, t, brand }) => {
+    await page.goto(`/reservas/sesion/?id=${SESSION.saturdayGroup}`)
+    await page.getByRole("button", { name: t("session.cta"), exact: true }).click()
+    await signIn(page, t, STUDENT_EMAIL)
+    const sheet = page.getByRole("dialog", { name: "Clase grupal" })
+    await sheet.getByRole("button", { name: t("sheet.confirm") }).click()
+
+    const success = page.getByRole("dialog", { name: t("success.title") })
+    const actions = success.getByRole("group", { name: t("success.calendar") })
+    await expect(actions).toBeVisible()
+
+    // Saturday 17 October 10:00 Buenos Aires = 13:00 UTC; in person, so the address (shared once booked) is the location.
+    const google = actions.getByRole("link", { name: new RegExp(t("calendar.google")) })
+    await expect(google).toHaveAttribute("target", "_blank")
+    await expect(google).toHaveAttribute("rel", "noopener noreferrer")
+    await expect(google).toHaveAttribute("href", /location=Calle%20Falsa%20123%20\(demo\)/)
+    const rawHref = (await google.getAttribute("href")) ?? ""
+    const href = new URL(rawHref)
+    expect(`${href.origin}${href.pathname}`).toBe("https://calendar.google.com/calendar/render")
+    expect(href.searchParams.get("action")).toBe("TEMPLATE")
+    expect(href.searchParams.get("text")).toBe(`Clase grupal · ${brand.name}`)
+    expect(href.searchParams.get("dates")).toMatch(/^20261017T130000Z\/20261017T\d{4}00Z$/)
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      actions.getByRole("button", { name: t("calendar.ics") }).click(),
+    ])
+    expect(download.suggestedFilename()).toBe("clase-grupal-2026-10-17.ics")
+    const ics = readFileSync((await download.path()) ?? "", "utf8")
+    expect(ics.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true)
+    expect(ics).toContain("\r\nBEGIN:VEVENT\r\n")
+    expect(ics).toContain("\r\nDTSTART:20261017T130000Z\r\n")
+    expect(ics).toContain(`\r\nUID:session-${SESSION.saturdayGroup}@${brand.domain}\r\n`)
+    expect(ics).toContain("\r\nLOCATION:Calle Falsa 123 (demo)\r\n")
+
+    // Same event from Mis reservas: same UID, so importing it again updates instead of duplicating.
+    await success.getByRole("link", { name: t("success.mine") }).click()
+    const card = page.getByRole("region", { name: t("mine.upcoming") }).getByRole("article", { name: "Clase grupal" })
+    const mine = card.getByRole("group", { name: t("success.calendar") })
+    await expect(mine.getByRole("link", { name: new RegExp(t("calendar.google")) })).toHaveAttribute("href", rawHref)
+    const [again] = await Promise.all([page.waitForEvent("download"), mine.getByRole("button", { name: t("calendar.ics") }).click()])
+    expect(again.suggestedFilename()).toBe("clase-grupal-2026-10-17.ics")
+    const uid = (text: string) => text.split("\r\n").find((line) => line.startsWith("UID:"))
+    expect(uid(readFileSync((await again.path()) ?? "", "utf8"))).toBe(uid(ics))
   })
 })
 

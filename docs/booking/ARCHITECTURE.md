@@ -274,7 +274,7 @@ Reason: rules must be readable by Postgres to be authoritative; keeping them onl
 
 ## 8. Theme application (ADR-008)
 
-1. `BrandConfig = { id, name, logo, contact, theme: BookingTheme, copy, terms, rules, features }` (contract in `booking/theme`, values in `brands/*`). Token roles follow `UX_DESIGN.md` §6.
+1. `BrandConfig = { id, name, domain, logo, contact, theme: BookingTheme, copy, terms, rules, features }` (contract in `booking/theme`, values in `brands/*`). Token roles follow `UX_DESIGN.md` §6.
 2. `themeToCssVars(theme)` (pure, unit-tested) maps roles to the shadcn variable names already wired in `app/globals.css` `@theme inline` (`--background`, `--primary`, `--radius`, …) plus the new ones (`--primary-hover`, `--success`, `--shadow-card`, …).
 3. `<BookingThemeScope brand>` renders `<div data-booking-theme={brand.id} style={vars}>` in the `/reservas` and `/admin` layouts, sets the canvas background, `:focus-visible` outline and fonts inside the scope. `:root` and landing styles are not modified.
 4. Components consume Tailwind semantic utilities (`bg-primary`, `rounded-[var(--radius-button)]`) and copy via `useCopy(key)` / `useTerm(key)`; no hex literals or brand strings in `booking/ui`.

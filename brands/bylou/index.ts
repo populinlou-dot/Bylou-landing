@@ -8,6 +8,8 @@ export const bylouBrand: BrandConfig = {
   id: "bylou",
   name: "Yoga ByLou",
   locale: "es-AR",
+  // public/CNAME (www.bylou.com.ar): identifies calendar events (UID) and the .ics producer.
+  domain: "bylou.com.ar",
   logo: { src: "assets/ginkgo.png", alt: "Yoga ByLou", wordmark: "Yoga ByLou" },
   images: { emptyState: "assets/ginkgo.png" },
   contact: { instagramDm: "https://ig.me/m/bylou.yoga", email: "yoga.byloupopulin@gmail.com" },

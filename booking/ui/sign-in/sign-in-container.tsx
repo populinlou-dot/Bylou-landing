@@ -2,10 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { needsDisplayName, sanitizeReturnTo, saveDisplayName, type AuthCode } from "../../application"
-import { useAuthState, useCopy, useReadyRuntime } from "../booking-context"
+import { needsDisplayName, sanitizeReturnTo, saveDisplayName, type AuthChallenge, type AuthCode } from "../../application"
+import { useAuthState, useBooking, useCaptchaConfig, useCopy, useReadyRuntime } from "../booking-context"
 import { ProfileNameView, type ProfileNameError } from "./profile-name-view"
 import { SignInView, type SignInStep } from "./sign-in-view"
+import { TurnstileWidget, type TurnstileWidgetHandle } from "./turnstile"
 
 /** Supabase's default minimum between OTP emails is 60 s; the button mirrors it. */
 export const RESEND_COOLDOWN_SECONDS = 60
@@ -15,6 +16,11 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
   const authState = useAuthState()
   const router = useRouter()
   const t = useCopy()
+  const { brand } = useBooking()
+  const captcha = useCaptchaConfig()
+  const captchaRef = useRef<TurnstileWidgetHandle>(null)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const captchaBlocked = captcha !== null && captchaToken === null
   /** "name" = required profile step (no display name yet; owner decision 2026-10-14). */
   const [step, setStep] = useState<SignInStep | "name">("email")
   const [email, setEmail] = useState("")
@@ -50,10 +56,14 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
   }, [cooldown])
 
   async function sendCode(isResend: boolean) {
+    if (captchaBlocked) return
+    const challenge: AuthChallenge | undefined = captchaToken ? { captchaToken } : undefined
     setPending(true)
     setError(null)
     setNotice(null)
-    const result = await auth.requestCode(email)
+    const result = await auth.requestCode(email, challenge)
+    // Single use: Supabase spent the token on this request whatever the outcome, so get a fresh one.
+    if (challenge) captchaRef.current?.reset()
     setPending(false)
     if (!result.ok) {
       setError(result.code)
@@ -130,6 +140,18 @@ export function SignInContainer({ returnTo }: { returnTo: string }) {
       cooldown={cooldown}
       demoCode={demoCode}
       notice={notice}
+      captchaBlocked={captchaBlocked}
+      captcha={
+        captcha ? (
+          <TurnstileWidget
+            ref={captchaRef}
+            siteKey={captcha.siteKey}
+            locale={brand.locale}
+            onToken={setCaptchaToken}
+            showPendingHint={step === "email"}
+          />
+        ) : null
+      }
       onEmailChange={(value) => {
         setEmail(value)
         if (error) setError(null)

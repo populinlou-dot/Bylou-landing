@@ -11,7 +11,7 @@ import { bookingComposition as composed } from "../_booking/composition"
  */
 export function BookingRoot({ children }: { children: ReactNode }) {
   return (
-    <BookingProvider brand={composed.brand} runtime={composed.runtime}>
+    <BookingProvider brand={composed.brand} runtime={composed.runtime} captcha={composed.captcha}>
       <BookingThemeScope brand={composed.brand}>
         <BookingShell>{children}</BookingShell>
       </BookingThemeScope>

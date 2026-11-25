@@ -108,12 +108,13 @@ export interface BookingRepository {
 }
 
 export interface AuthUser { id: string; email: string; displayName: string | null; isStaff: boolean }
-export type AuthCode = "invalid_email" | "invalid_code" | "code_expired" | "rate_limited" | "network_error" | "unknown";
+export type AuthCode = "invalid_email" | "invalid_code" | "code_expired" | "rate_limited" | "captcha_failed" | "network_error" | "unknown";
+export interface AuthChallenge { captchaToken?: string } // ADR-024; single use
 
 export interface AuthPort {
   getUser(): Promise<AuthUser | null>;
   onChange(listener: (user: AuthUser | null) => void): () => void; // returns unsubscribe
-  requestCode(email: string): Promise<{ ok: true } | { ok: false; code: AuthCode }>;
+  requestCode(email: string, challenge?: AuthChallenge): Promise<{ ok: true } | { ok: false; code: AuthCode }>;
   verifyCode(email: string, code: string): Promise<{ ok: true; user: AuthUser } | { ok: false; code: AuthCode }>;
   updateProfile(input: { displayName: string; phone?: string }): Promise<{ ok: boolean }>;
   signOut(): Promise<void>;
@@ -304,6 +305,7 @@ sequenceDiagram
 - Profile row is created by a DB trigger on `auth.users` insert with `role = 'student'`; users can update only `display_name`/`phone` (DATA_MODEL).
 - Supabase settings (owner-gated in prod): email template must contain `{{ .Token }}`; Site URL `https://www.bylou.com.ar/reservas/ingresar/`; redirect allowlist the same plus `http://localhost:3000/reservas/ingresar/` (trailing slash); custom SMTP (the built-in sender is rate-limited and not for production).
 - Session refresh is client-side (`autoRefreshToken`). Guards in layouts are UX only; security is RLS/RPC.
+- Bot protection (ADR-024): with `NEXT_PUBLIC_TURNSTILE_SITE_KEY` set, the page renders Cloudflare Turnstile and sends a fresh token as `signInWithOtp({ options: { captchaToken } })` on every code request (send and resend; GoTrue checks `/otp`). `verifyOtp` (`/verify`) is not captcha-checked and gets no token. The secret key lives only in Supabase Auth.
 
 ## 10. Environments and configuration
 
@@ -320,6 +322,8 @@ There is no staging: Pages serves one site and deploys only from `main` (`REPOSI
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes (in bundle) | `.env.local`; GitHub repo **variable** for the Build step | Required when `NEXT_PUBLIC_BOOKING_DATA_SOURCE=supabase` (ADR-013). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes (in bundle, RLS-protected) | same | Anon or publishable key only. |
 | `NEXT_PUBLIC_BASE_PATH` | Yes | existing CI env (`""`) | Unchanged. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Yes (in bundle) | `.env.local`; GitHub repo **variable**, already passed to the Build step | Optional. Empty = captcha off; ignored by the mock source; a secret-looking value is a config error (ADR-024). |
+| Turnstile secret key | **Secret** | Supabase Dashboard → Bot and Abuse Protection; locally `SUPABASE_AUTH_CAPTCHA_SECRET` | Never in the frontend, repo or CI. |
 | Service-role key, DB password, `SUPABASE_ACCESS_TOKEN` | **Secret** | Owner's machine / Supabase dashboard only | Never in frontend, repo, `.env.example` values, or CI build env. Prod migrations are run by the owner. |
 
 `.env.example` documents the two public vars with empty values. A test/CI grep rejects `service_role` patterns in `out/` and the repo (SE-03).

@@ -1,7 +1,7 @@
 "use client"
 
 import { AlertCircle, Mail } from "lucide-react"
-import { useEffect, useId, useLayoutEffect, useRef, type FormEvent } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, type FormEvent, type ReactNode } from "react"
 import type { AuthCode } from "../../application"
 import { useCopy } from "../booking-context"
 import { DisplayTitle, Eyebrow, buttonClass } from "../primitives"
@@ -20,6 +20,10 @@ export interface SignInViewProps {
   demoCode: string | null
   /** Polite confirmation after a resend. */
   notice: string | null
+  /** Bot-protection widget (ADR-024), rendered at the same place on both steps so it is never remounted. */
+  captcha?: ReactNode
+  /** True while captcha is on and there is no token: sending (and resending) a code waits for it. */
+  captchaBlocked?: boolean
   onEmailChange: (value: string) => void
   onCodeChange: (value: string) => void
   onSubmitEmail: () => void
@@ -61,8 +65,9 @@ export function SignInView(props: SignInViewProps) {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (props.pending) return
-    if (props.step === "email") props.onSubmitEmail()
-    else props.onSubmitCode()
+    if (props.step === "email") {
+      if (!props.captchaBlocked) props.onSubmitEmail()
+    } else props.onSubmitCode()
   }
 
   const describedBy = [props.step === "code" ? hintId : null, props.error ? errorId : null].filter(Boolean).join(" ") || undefined
@@ -132,6 +137,8 @@ export function SignInView(props: SignInViewProps) {
           ) : null}
         </div>
 
+        {props.captcha ?? null}
+
         {props.error ? (
           <p id={errorId} role="alert" className="flex items-start gap-2 text-[14.5px] font-semibold text-destructive">
             <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -141,7 +148,8 @@ export function SignInView(props: SignInViewProps) {
 
         <button
           type="submit"
-          disabled={props.pending}
+          // Verifying a code needs no captcha token (only sending one does, ADR-024).
+          disabled={props.pending || (props.step === "email" && props.captchaBlocked === true)}
           aria-busy={props.pending}
           className={`${buttonClass.primary} w-full disabled:cursor-progress disabled:opacity-70`}
         >
@@ -160,7 +168,7 @@ export function SignInView(props: SignInViewProps) {
             <button
               type="button"
               onClick={props.onResend}
-              disabled={props.cooldown > 0 || props.pending}
+              disabled={props.cooldown > 0 || props.pending || props.captchaBlocked === true}
               className={`${buttonClass.link} disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline`}
             >
               {props.cooldown > 0 ? t("auth.resend.wait", { s: props.cooldown }) : t("auth.resend")}

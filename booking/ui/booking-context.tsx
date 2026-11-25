@@ -9,9 +9,20 @@ import { formatMessage } from "./format"
 /** Signed-in state for UX only: RLS/RPC re-check identity on every call (ADR-005). */
 export type AuthState = { status: "loading" } | { status: "signed_out" } | { status: "signed_in"; user: AuthUser }
 
+/**
+ * Sign-in bot protection chosen by the composition root (ADR-024). The secret never reaches the
+ * browser: Supabase Auth verifies the token server-side.
+ */
+export interface CaptchaConfig {
+  provider: "turnstile"
+  siteKey: string
+}
+
 interface BookingContextValue {
   brand: BrandConfig
   runtime: BookingRuntime
+  /** Null or omitted = no captcha (mock data source, or no site key configured). */
+  captcha?: CaptchaConfig | null
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null)
@@ -21,8 +32,8 @@ const AuthStateContext = createContext<AuthState>({ status: "loading" })
  * Provided by the composition root (app/reservas). booking/ui never imports brands or
  * infrastructure: the brand and the runtime (adapters) arrive here as props.
  */
-export function BookingProvider({ brand, runtime, children }: BookingContextValue & { children: ReactNode }) {
-  const value = useMemo(() => ({ brand, runtime }), [brand, runtime])
+export function BookingProvider({ brand, runtime, captcha = null, children }: BookingContextValue & { children: ReactNode }) {
+  const value = useMemo(() => ({ brand, runtime, captcha }), [brand, runtime, captcha])
   const [auth, setAuth] = useState<AuthState>({ status: "loading" })
 
   useEffect(() => {
@@ -66,6 +77,11 @@ export function useReadyRuntime(): { repository: BookingRepository; clock: Clock
   const { runtime } = useBooking()
   if (runtime.status !== "ready") throw new Error("Booking runtime is not ready; render inside <BookingRuntimeGate>")
   return { repository: runtime.repository, clock: runtime.clock, auth: runtime.auth }
+}
+
+/** Captcha settings for the sign-in screen, or null when bot protection is off. */
+export function useCaptchaConfig(): CaptchaConfig | null {
+  return useBooking().captcha ?? null
 }
 
 export type Translate = (key: CopyKey, vars?: Record<string, string | number>) => string

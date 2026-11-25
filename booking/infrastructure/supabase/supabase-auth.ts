@@ -1,8 +1,10 @@
 /**
  * AuthPort over Supabase Auth email OTP (ADR-004): the 6-digit code is typed on the same page,
  * so cross-device email opening works and no PKCE verifier is involved.
+ * Bot protection (ADR-024): the captcha token goes to `signInWithOtp` (`POST /otp`, captcha-checked
+ * by GoTrue). `verifyOtp` (`POST /verify`) is not captcha-checked, so it never receives one.
  */
-import type { AuthPort, AuthUser, RequestCodeResult, VerifyCodeResult } from "../../application"
+import type { AuthChallenge, AuthPort, AuthUser, RequestCodeResult, VerifyCodeResult } from "../../application"
 import type { SupabaseClientProvider } from "./client"
 import { mapAuthError } from "./mappers"
 
@@ -33,11 +35,15 @@ export class SupabaseAuth implements AuthPort {
     return () => data.subscription.unsubscribe()
   }
 
-  async requestCode(email: string): Promise<RequestCodeResult> {
+  async requestCode(email: string, challenge?: AuthChallenge): Promise<RequestCodeResult> {
     const normalized = email.trim().toLowerCase()
     if (!EMAIL.test(normalized)) return { ok: false, code: "invalid_email" }
+    const captchaToken = challenge?.captchaToken?.trim()
     try {
-      const { error } = await this.client().auth.signInWithOtp({ email: normalized, options: { shouldCreateUser: true } })
+      const { error } = await this.client().auth.signInWithOtp({
+        email: normalized,
+        options: captchaToken ? { shouldCreateUser: true, captchaToken } : { shouldCreateUser: true },
+      })
       return error ? { ok: false, code: mapAuthError(error, "request") } : { ok: true }
     } catch {
       return { ok: false, code: "network_error" }

@@ -1,4 +1,13 @@
-export { BookingProvider, useBooking, useCopy, useReadyRuntime, useTerm, type Translate } from "./booking-context"
+export {
+  BookingProvider,
+  useBooking,
+  useCaptchaConfig,
+  useCopy,
+  useReadyRuntime,
+  useTerm,
+  type CaptchaConfig,
+  type Translate,
+} from "./booking-context"
 export { BookingThemeScope } from "./booking-theme-scope"
 export { BookingShell } from "./booking-shell"
 export { BookingRuntimeGate, ConfigErrorState } from "./runtime-gate"

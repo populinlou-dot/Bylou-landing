@@ -6,6 +6,7 @@ export type BookingConfigVariable =
   | "NEXT_PUBLIC_BOOKING_BRAND"
   | "NEXT_PUBLIC_SUPABASE_URL"
   | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  | "NEXT_PUBLIC_TURNSTILE_SITE_KEY"
 
 /**
  * What the composition root hands to the UI. The UI renders a state per variant and

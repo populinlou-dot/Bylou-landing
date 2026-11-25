@@ -57,3 +57,34 @@ function base64UrlDecode(segment: string): string {
   const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
   return atob(padded)
 }
+
+/** Bot protection for Supabase Auth sign-in (ADR-024). Only the public site key reaches the bundle. */
+export interface CaptchaConfig {
+  provider: "turnstile"
+  siteKey: string
+}
+
+export type CaptchaConfigResolution =
+  | { ok: true; captcha: CaptchaConfig | null }
+  | { ok: false; reason: "invalid"; variable: "NEXT_PUBLIC_TURNSTILE_SITE_KEY"; received: null }
+
+/**
+ * Cloudflare Turnstile site keys are short ("0x4AAAAAAA…", test keys "1x00000000000000000000AA");
+ * secret keys share the "<digit>x" prefix but are longer (35 characters). Loose on purpose: the
+ * length cap is what keeps a pasted secret key out of the bundle.
+ */
+const TURNSTILE_SITE_KEY = /^[0-9]x[A-Za-z0-9_-]{18,28}$/
+
+/**
+ * `NEXT_PUBLIC_TURNSTILE_SITE_KEY`: empty or missing → captcha off (no widget, no script, no token).
+ * Anything that is not a plausible site key — including a Turnstile secret key or a Supabase
+ * secret — is a config error, and the raw value is never echoed back.
+ */
+export function resolveCaptchaConfig(rawSiteKey: string | null | undefined): CaptchaConfigResolution {
+  const siteKey = rawSiteKey?.trim() ?? ""
+  if (siteKey === "") return { ok: true, captcha: null }
+  if (!TURNSTILE_SITE_KEY.test(siteKey) || looksSecret(siteKey)) {
+    return { ok: false, reason: "invalid", variable: "NEXT_PUBLIC_TURNSTILE_SITE_KEY", received: null }
+  }
+  return { ok: true, captcha: { provider: "turnstile", siteKey } }
+}

@@ -10,7 +10,9 @@ import {
   SupabaseAuth,
   SupabaseBookingRepository,
   createSupabaseClientProvider,
+  resolveCaptchaConfig,
   resolveSupabaseConfig,
+  type CaptchaConfig,
 } from "./supabase"
 
 export const BOOKING_DATA_SOURCES = ["mock", "supabase"] as const
@@ -39,8 +41,11 @@ export interface CreateRuntimeOptions {
   waitlist?: boolean
   clock?: Clock
   mockLatencyMs?: number
-  /** Raw NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (required for "supabase"). */
-  supabase?: { url?: string | null; anonKey?: string | null }
+  /**
+   * Raw NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (required for "supabase") and the
+   * optional NEXT_PUBLIC_TURNSTILE_SITE_KEY (Supabase Auth captcha, ADR-024; ignored by "mock").
+   */
+  supabase?: { url?: string | null; anonKey?: string | null; turnstileSiteKey?: string | null }
 }
 
 /**
@@ -50,6 +55,8 @@ export interface CreateRuntimeOptions {
 export interface BookingAdapters {
   runtime: BookingRuntime
   admin: AdminRepository | null
+  /** Sign-in bot protection; null when off, always null for the mock data source (ADR-024). */
+  captcha: CaptchaConfig | null
 }
 
 export function createBookingRuntime(rawDataSource: string | null | undefined, options: CreateRuntimeOptions): BookingRuntime {
@@ -61,6 +68,7 @@ export function createBookingAdapters(rawDataSource: string | null | undefined, 
   if (!resolution.ok) {
     return {
       admin: null,
+      captcha: null,
       runtime: {
         status: "config_error",
         reason: resolution.reason,
@@ -76,12 +84,22 @@ export function createBookingAdapters(rawDataSource: string | null | undefined, 
     if (!config.ok) {
       return {
         admin: null,
+        captcha: null,
         runtime: { status: "config_error", reason: config.reason, variable: config.variable, received: config.received },
+      }
+    }
+    const captcha = resolveCaptchaConfig(options.supabase?.turnstileSiteKey)
+    if (!captcha.ok) {
+      return {
+        admin: null,
+        captcha: null,
+        runtime: { status: "config_error", reason: captcha.reason, variable: captcha.variable, received: captcha.received },
       }
     }
     const client = createSupabaseClientProvider(config.config)
     return {
       admin: new SupabaseAdminRepository(client),
+      captcha: captcha.captcha,
       runtime: {
         status: "ready",
         isDemo: false,
@@ -101,6 +119,8 @@ export function createBookingAdapters(rawDataSource: string | null | undefined, 
     waitlistEnabled: options.waitlist ?? false,
   })
   return {
+    // The demo sends no email, so it needs no bot protection: the site key is ignored (ADR-024).
+    captcha: null,
     admin: new MockAdminRepository({ clock, store: repository, latencyMs: options.mockLatencyMs, currentUserId }),
     runtime: { status: "ready", isDemo: true, clock, auth, repository },
   }

@@ -2,6 +2,7 @@ import type { AdminRepository, BookingRuntime } from "@/booking/application"
 import { createBookingAdapters } from "@/booking/infrastructure/data-source"
 import { DEMO_STAFF_EMAIL } from "@/booking/infrastructure/mock"
 import type { BrandConfig } from "@/booking/theme"
+import type { CaptchaConfig } from "@/booking/ui"
 import { resolveBrand } from "@/brands"
 
 /**
@@ -18,6 +19,8 @@ export interface BookingComposition {
   admin: AdminRepository | null
   /** Demo-only sign-in hint for the admin guard (mock data source). */
   demoStaffEmail: string | null
+  /** Sign-in bot protection (ADR-024); null when off and always for the mock data source. */
+  captcha: CaptchaConfig | null
 }
 
 function compose(): BookingComposition {
@@ -27,6 +30,7 @@ function compose(): BookingComposition {
       brand: brandResolution.fallback,
       admin: null,
       demoStaffEmail: null,
+      captcha: null,
       runtime: {
         status: "config_error",
         reason: "invalid",
@@ -36,7 +40,7 @@ function compose(): BookingComposition {
     }
   }
   const { brand } = brandResolution
-  const { runtime, admin } = createBookingAdapters(process.env.NEXT_PUBLIC_BOOKING_DATA_SOURCE, {
+  const { runtime, admin, captcha } = createBookingAdapters(process.env.NEXT_PUBLIC_BOOKING_DATA_SOURCE, {
     rules: brand.rules,
     waitlist: brand.features.waitlist,
     mockLatencyMs: 250,
@@ -44,10 +48,12 @@ function compose(): BookingComposition {
     supabase: {
       url: process.env.NEXT_PUBLIC_SUPABASE_URL,
       anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      // Cloudflare Turnstile SITE key (public); the secret lives only in Supabase Auth (ADR-024).
+      turnstileSiteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     },
   })
   const demoStaffEmail = runtime.status === "ready" && runtime.isDemo ? DEMO_STAFF_EMAIL : null
-  return { brand, runtime, admin, demoStaffEmail }
+  return { brand, runtime, admin, demoStaffEmail, captcha }
 }
 
 export const bookingComposition: BookingComposition = compose()

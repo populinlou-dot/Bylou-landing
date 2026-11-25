@@ -5,6 +5,7 @@
  * address whose local part is "staff" (e.g. staff@demo.test), which signs in as the fictional
  * demo staff member so the /admin/ demo works (Phase 4.1), and "nueva" (e.g. nueva@demo.test), a second
  * fictional student who has a pack but no name yet (required name step, waitlist journey; Phase 4.4).
+ * There is no bot protection in the demo: a captcha challenge, if passed, is ignored (ADR-024).
  */
 import type { AuthPort, AuthUser, RequestCodeResult, VerifyCodeResult } from "../../application"
 

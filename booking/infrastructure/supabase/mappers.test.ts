@@ -117,6 +117,8 @@ describe("mapAuthError (Supabase Auth → AuthCode)", () => {
     [{ name: "AuthApiError", code: "validation_failed", status: 400 }, "request", "invalid_email"],
     [{ name: "AuthApiError", code: "validation_failed", status: 400 }, "verify", "invalid_code"],
     [{ name: "AuthApiError", code: "signup_disabled", status: 422 }, "request", "unknown"],
+    [{ name: "AuthApiError", code: "captcha_failed", status: 400 }, "request", "captcha_failed"],
+    [{ name: "AuthApiError", code: "captcha_failed", status: 400 }, "verify", "captcha_failed"],
   ] as const)("%j during %s → %s", (error, step, expected) => {
     expect(mapAuthError(error, step)).toBe(expected)
   })

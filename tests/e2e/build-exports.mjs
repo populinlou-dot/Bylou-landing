@@ -50,6 +50,8 @@ function build(name, env) {
       NEXT_PUBLIC_BASE_PATH: "",
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
+      // No Turnstile in E2E (ADR-024): never inherit a site key from .env.local, never call Cloudflare.
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
       ...env,
     },
   })

@@ -56,6 +56,7 @@ export {
   type MarkAttendanceResult,
   type RosterEntry,
   type StaffRole,
+  type AuthChallenge,
   type AuthCode,
   type AuthPort,
   type AuthUser,

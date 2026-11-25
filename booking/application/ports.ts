@@ -230,7 +230,24 @@ export interface AuthUser {
   email: string
 }
 
-export type AuthCode = "invalid_email" | "invalid_code" | "code_expired" | "rate_limited" | "network_error" | "unknown"
+/** `captcha_failed`: the auth server rejected (or did not get) the bot-protection token (ADR-024). */
+export type AuthCode =
+  | "invalid_email"
+  | "invalid_code"
+  | "code_expired"
+  | "rate_limited"
+  | "captcha_failed"
+  | "network_error"
+  | "unknown"
+
+/**
+ * Proof from a bot-protection challenge (ADR-024). Single use: the auth server spends it on the
+ * request, so the caller needs a fresh one for every code request. Adapters without bot
+ * protection ignore it.
+ */
+export interface AuthChallenge {
+  captchaToken?: string
+}
 
 export type RequestCodeResult =
   /** `demoCode` is set only by the mock adapter, which shows it on screen (ARCHITECTURE §10). */
@@ -244,7 +261,8 @@ export interface AuthPort {
   getUser(): Promise<AuthUser | null>
   /** Called with the current user on subscribe and on every change. Returns unsubscribe. */
   onChange(listener: (user: AuthUser | null) => void): () => void
-  requestCode(email: string): Promise<RequestCodeResult>
+  /** Sends the sign-in code. Only this call needs `challenge`: code verification is not captcha-protected. */
+  requestCode(email: string, challenge?: AuthChallenge): Promise<RequestCodeResult>
   verifyCode(email: string, code: string): Promise<VerifyCodeResult>
   signOut(): Promise<void>
 }

@@ -11,7 +11,7 @@ import { bookingComposition as composed } from "../_booking/composition"
  */
 export function AdminRoot({ children }: { children: ReactNode }) {
   return (
-    <BookingProvider brand={composed.brand} runtime={composed.runtime}>
+    <BookingProvider brand={composed.brand} runtime={composed.runtime} captcha={composed.captcha}>
       <AdminProvider repository={composed.admin} demoStaffEmail={composed.demoStaffEmail}>
         <BookingThemeScope brand={composed.brand}>
           <AdminShell>{children}</AdminShell>

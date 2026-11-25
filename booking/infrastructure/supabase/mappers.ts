@@ -219,6 +219,8 @@ export function mapAuthError(error: AuthErrorLike, step: "request" | "verify"): 
   }
   // GoTrue answers otp_expired for both a wrong and an expired code ("Token has expired or is invalid").
   if (code === "otp_expired") return "invalid_code"
+  // Missing, expired, already spent or rejected bot-protection token (GoTrue verifyCaptcha, 400; ADR-024).
+  if (code === "captcha_failed") return "captcha_failed"
   if (code === "email_address_invalid") return "invalid_email"
   if (code === "validation_failed") return step === "request" ? "invalid_email" : "invalid_code"
   return "unknown"

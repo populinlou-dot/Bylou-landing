@@ -11,7 +11,7 @@ Contexto: ADR-002 (Supabase), ADR-004 (login con código OTP de 6 dígitos), ADR
 | # | Paso | Dónde | Tiempo aprox. |
 |---|------|-------|---------------|
 | 1 | [Crear el proyecto](#1-create-the-project) | supabase.com | 10 min |
-| 2 | [Configurar Auth](#2-auth-settings) | Dashboard → Authentication | 20 min |
+| 2 | [Configurar Auth](#2-auth-settings) (CAPTCHA §2.5 at launch) | Dashboard → Authentication, Cloudflare | 20 min (+ 10 min CAPTCHA) |
 | 3 | [SMTP propio + DNS](#3-custom-smtp-and-dns) | Proveedor de email + DNS de bylou.com.ar | 30–60 min (+ espera DNS) |
 | 4 | [Aplicar migraciones](#4-apply-migrations) | Terminal (CLI) | 10 min |
 | 5 | [Crear la admin (Lou)](#5-first-admin-lou) | App + SQL Editor | 5 min |
@@ -110,10 +110,48 @@ Ruta: **Authentication → Rate Limits**. Valores por defecto según la document
 | Verificaciones de código | 30 cada 5 min por IP | Dejar. |
 | Sign-ups + sign-ins | 30 cada 5 min por IP | Dejar. |
 
-### 2.5 CAPTCHA (Cloudflare Turnstile): recomendado antes del lanzamiento público
+### 2.5 CAPTCHA (Cloudflare Turnstile): before the public launch
 
-- [ ] **Por ahora NO lo actives.** Necesita un cambio en el frontend (widget de Turnstile + pasar `captchaToken` a `signInWithOtp`) que todavía no existe: es un **slice pendiente**. Si lo activas antes, el login deja de funcionar.
-- Cuando ese slice esté listo: **Authentication → Bot and Abuse Protection → Enable CAPTCHA protection** → proveedor **Cloudflare Turnstile** → pega la *Secret Key* de Turnstile (en el dashboard, nunca en el chat).
+The app side is done (ADR-024): the sign-in screen shows Cloudflare Turnstile and sends its token with every "send code" / "resend code" request. Supabase checks the token with the **secret key**, which only Supabase knows. The browser only gets the public **site key**.
+
+> ⛔ **Order matters.** If you turn on CAPTCHA in Supabase **before** a site built with the site key is live, **every sign-in fails** ("No pudimos confirmar la verificación de seguridad…"). Do the steps in this order. To undo: turn it off in Supabase **first**, then remove the GitHub variable.
+
+> The booking pages only work in production once the Supabase variables are wired into the deploy (§6, your launch decision). Do steps 4–5 in the same launch, after that deploy.
+
+1. [ ] **Create the widget** — <https://dash.cloudflare.com> → **Turnstile** → **Add widget**:
+   - Name: `Bylou sign-in`.
+   - Hostnames: `www.bylou.com.ar` and `bylou.com.ar` (the production domain; `public/CNAME`). Do not add `localhost` to the production widget.
+   - Widget mode: **Managed**. Pre-clearance: **No**.
+   - Create it and keep the page open: it shows the **Site Key** (public) and the **Secret Key** (secret: password manager only, never in the repo, GitHub, the chat or `.env.local`).
+2. [ ] **Site key → GitHub variable** — repo → **Settings → Secrets and variables → Actions → Variables** tab (not Secrets) → **New repository variable**: name `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, value = the Site Key. The deploy workflow already passes it to the build (an unset variable means "captcha off").
+3. [ ] **Deploy and check the widget** — merge to `main` (or run the workflow manually). Open <https://www.bylou.com.ar/reservas/ingresar/>: "Enviarme el código" becomes clickable after a second or two (most visitors never see the widget; it only appears when Cloudflare wants a click). Sending a code still works because CAPTCHA is not enforced yet.
+4. [ ] **Secret key → Supabase** — Dashboard → **Authentication → Bot and Abuse Protection** (Project Settings → Authentication in some dashboard versions) → **Enable CAPTCHA protection** → provider **Cloudflare Turnstile** → paste the **Secret Key** → **Save**.
+5. [ ] **Test** — in a private window, sign in with a disposable email: the code arrives and signing in works. If every attempt says the security check failed, turn the toggle off (step 4) and tell the orchestrator.
+
+Notes:
+
+- The app rejects a value that does not look like a site key (for example a pasted secret key) and shows the configuration error instead of the sign-in, without printing the value.
+- Testing on your machine against `bylou-prod` (§7) once CAPTCHA is on: the production widget does not allow `localhost`, so sign-in from `localhost` fails. Either test on the real site or add `localhost` to the widget's hostnames temporarily.
+
+**Local test with Cloudflare's test keys (developer, local Supabase only).** Cloudflare publishes keys that work on any host, including `localhost` (<https://developers.cloudflare.com/turnstile/troubleshooting/testing/>): site key `1x00000000000000000000AA` (always passes), `2x00000000000000000000AB` (always fails), `3x00000000000000000000FF` (forces an interactive challenge); secret key `1x0000000000000000000000000000000AA` (always passes), `2x0000000000000000000000000000000AA` (always fails), `3x0000000000000000000000000000000AA` ("token already spent").
+
+```bash
+# 1. supabase/config.toml → [auth.captcha] enabled = true   (local edit, do NOT commit)
+export SUPABASE_AUTH_CAPTCHA_SECRET=1x0000000000000000000000000000000AA
+npx pnpm@9 run db:stop && npx pnpm@9 run db:start      # Auth reads config.toml at start
+
+# 2. App against local Supabase with the always-pass site key
+NEXT_PUBLIC_BOOKING_DATA_SOURCE=supabase \
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<local anon / publishable key from `supabase status`> \
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA \
+npx pnpm@9 run dev                                      # http://localhost:3000/reservas/ingresar/
+
+# 3. Undo: enabled = false again, unset the secret, restart the stack
+unset SUPABASE_AUTH_CAPTCHA_SECRET && npx pnpm@9 run db:stop && npx pnpm@9 run db:start
+```
+
+The code arrives in Mailpit (<http://127.0.0.1:54324>). Try the always-fails site key (the inline "No pudimos cargar la verificación…" message with "Reintentar verificación") and the always-fails secret (Supabase answers `captcha_failed`: "No pudimos confirmar la verificación…"). Keep CAPTCHA **off** locally for `npx pnpm@9 run test:e2e:supabase` and the race tests: they build or call Auth without a site key.
 
 ---
 
@@ -288,6 +326,8 @@ Ruta: repo en GitHub → **Settings → Secrets and variables → Actions → pe
 
 1. [ ] Crea las 3 variables (pestaña **Variables**, no **Secrets**).
 
+> A fourth variable, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (CAPTCHA site key, also public), is created at launch following §2.5. Unlike these three, the workflow already passes it to the build.
+
 > **Todavía no tienen efecto.** Hoy `.github/workflows/main.yml` no le pasa estas variables al build, así que en producción `/reservas` muestra el estado de error de configuración (ADR-013) y la landing no tiene link a `/reservas`. Conectarlas al workflow (`${{ vars.NOMBRE }}` en el paso *Build*) es un **cambio separado, que tú apruebas**, al momento del lanzamiento.
 
 ---
@@ -326,6 +366,7 @@ Envíale al orquestador **solo** esto:
 Project ref: <ref>
 [x] 1 Proyecto creado (sa-east-1)
 [x] 2 Auth configurado (OTP 6 dígitos, templates con {{ .Token }}, URLs)
+[x] 2.5 CAPTCHA activo (Turnstile widget, variable de GitHub, secret en Supabase)   (o: pendiente)
 [x] 3 SMTP propio activo y dominio verificado   (o: pendiente)
 [x] 4 Migraciones aplicadas, RLS verificado, tarea pg_cron "expire-credit-grants" activa
 [x] 5 Lou promovida a staff
@@ -410,7 +451,8 @@ Consultadas el 2026-10-14:
 - Site URL, Redirect URLs, comodines `*`/`**`: <https://supabase.com/docs/guides/auth/redirect-urls>
 - Rate limits por defecto: <https://supabase.com/docs/guides/auth/rate-limits>
 - SMTP propio (límites del incorporado, 30/h inicial, proveedores): <https://supabase.com/docs/guides/auth/auth-smtp>
-- CAPTCHA / Turnstile: <https://supabase.com/docs/guides/auth/auth-captcha>
+- CAPTCHA / Turnstile: <https://supabase.com/docs/guides/auth/auth-captcha>; endpoints that check the token (2026-11-06): <https://github.com/supabase/auth/blob/master/internal/api/api.go>
+- Turnstile explicit rendering, `reset`, 300 s single-use tokens: <https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/>; test keys: <https://developers.cloudflare.com/turnstile/troubleshooting/testing/>
 - API keys (publishable/secret, anon/service_role): <https://supabase.com/docs/guides/api/api-keys>
 - `supabase db push`, `link`, `login`: <https://supabase.com/docs/reference/cli/supabase-db-push>
 - `supabase config push`: <https://supabase.com/docs/reference/cli/supabase-config-push>

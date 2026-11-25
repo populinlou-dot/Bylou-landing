@@ -215,10 +215,13 @@ token_verifications = 30
 web3 = 30
 
 # Configure one of the supported captcha providers: `hcaptcha`, `turnstile`.
-# [auth.captcha]
-# enabled = true
-# provider = "hcaptcha"
-# secret = ""
+# Bylou (ADR-024): Cloudflare Turnstile, OFF locally so `supabase start`, the race tests and the
+# opt-in Supabase E2E keep working without a widget. To try it locally, see SUPABASE_SETUP.md §2.5
+# (Cloudflare's always-pass test keys). Never commit a real secret: it comes from the environment.
+[auth.captcha]
+enabled = false
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
